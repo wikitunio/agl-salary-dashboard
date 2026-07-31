@@ -151,6 +151,15 @@ def main():
         selected_month = st.sidebar.selectbox("2. Select Focus Month", options=sorted_months, index=len(sorted_months)-1)
         
         month_data = df_fy[df_fy['Month_Name'] == selected_month].iloc[0]
+        
+        # --- YoY INCREMENT DETECTOR ---
+        prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
+        if not prev_year_month.empty:
+            prev_basic = prev_year_month.iloc[0]['Basic Pay']
+            delta_basic = month_data['Basic Pay'] - prev_basic
+            delta_pct = f"{(delta_basic / prev_basic) * 100:.1f}% YoY" if prev_basic > 0 else None
+        else:
+            delta_pct = None
 
         # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
         st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
@@ -163,14 +172,24 @@ def main():
         
         st.divider()
 
-        # --- SECTION 2: FOCUS MONTH ---
+        # --- SECTION 2: FOCUS MONTH (EXPANDED) ---
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         
+        # Top Row (High Level)
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}")
-        col_m2.metric("Monthly Net Pay", f"Rs. {month_data['Net Pay']:,.0f}")
-        col_m3.metric("Monthly Income Tax", f"Rs. {month_data['Income Tax']:,.0f}")
+        col_m1.metric("Gross Pay", f"Rs. {month_data['Gross Pay']:,.0f}")
+        col_m2.metric("Total Deductions", f"Rs. {month_data['Total Deductions']:,.0f}")
+        col_m3.metric("Net Pay Transferred", f"Rs. {month_data['Net Pay']:,.0f}")
         col_m4.metric("Leave Balance", f"{month_data['Leave Balance']} Days")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Bottom Row (Detailed)
+        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
+        col_m5.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}", delta=delta_pct)
+        col_m6.metric("Hard Area Allowance", f"Rs. {month_data['Hard Area']:,.0f}")
+        col_m7.metric("Income Tax", f"Rs. {month_data['Income Tax']:,.0f}")
+        col_m8.metric("Mess Bill", f"Rs. {month_data['Mess Bill']:,.0f}")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -194,6 +213,16 @@ def main():
                 st.subheader("Deduction Slice")
                 deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
                 fy_deduction_values = [month_data[label] for label in deduction_labels]
+                
+                # --- AUTO-DETECTOR LOGIC ---
+                known_sum = sum(fy_deduction_values)
+                unaccounted_deductions = month_data['Total Deductions'] - known_sum
+                
+                if unaccounted_deductions > 5: # using 5 to ignore tiny rounding errors
+                    deduction_labels.append("⚠️ Unmapped Deductions")
+                    fy_deduction_values.append(unaccounted_deductions)
+                    st.warning(f"Detected Rs. {unaccounted_deductions:,.0f} in unmapped deductions this month!")
+                # ---------------------------
                 
                 fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.5, template="plotly_white")
                 fig_pie.update_traces(textposition='inside', textinfo='percent')
@@ -249,7 +278,7 @@ def main():
             st.markdown("Tracking your total all-time Provident Fund wealth against an academic savings milestone.")
             
             # Master's Degree Milestone Target
-            MASTERS_TARGET = 3000000  # 3 Million PKR Target (Adjustable)
+            MASTERS_TARGET = 3000000  # 3 Million PKR Target
             current_total_pf = month_data['PF Employee Bal'] + month_data['PF Company Bal']
             progress_pct = min((current_total_pf / MASTERS_TARGET), 1.0)
             
@@ -262,9 +291,8 @@ def main():
 
         with tab4:
             st.subheader("⚖️ Month-to-Month Comparison")
-            st.markdown("Select any two months from your entire history to see exact changes in your compensation.")
+            st.markdown("Select any two months to see exact, itemized changes in your compensation.")
             
-            # Use all available months sorted chronologically (newest first)
             all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
             
             col_comp1, col_comp2 = st.columns(2)
@@ -277,24 +305,28 @@ def main():
                 data_a = df[df['Month'] == month_a].iloc[0]
                 data_b = df[df['Month'] == month_b].iloc[0]
                 
-                st.markdown(f"#### 📈 Shift from {month_a} to {month_b}")
-                
-                mc1, mc2, mc3, mc4 = st.columns(4)
-                # For earnings, higher is better (default delta color)
-                mc1.metric("Basic Pay", f"Rs. {data_b['Basic Pay']:,.0f}", f"{data_b['Basic Pay'] - data_a['Basic Pay']:,.0f}")
-                mc2.metric("Gross Pay", f"Rs. {data_b['Gross Pay']:,.0f}", f"{data_b['Gross Pay'] - data_a['Gross Pay']:,.0f}")
-                mc3.metric("Net Pay", f"Rs. {data_b['Net Pay']:,.0f}", f"{data_b['Net Pay'] - data_a['Net Pay']:,.0f}")
-                
-                # For deductions, an increase is technically a negative impact on take-home pay, so we use delta_color="inverse"
-                mc4.metric("Total Deductions", f"Rs. {data_b['Total Deductions']:,.0f}", f"{data_b['Total Deductions'] - data_a['Total Deductions']:,.0f}", delta_color="inverse")
-                
+                st.markdown(f"#### 💰 Earnings & Allowances")
+                ec1, ec2, ec3, ec4 = st.columns(4)
+                ec1.metric("Basic Pay", f"Rs. {data_b['Basic Pay']:,.0f}", f"{data_b['Basic Pay'] - data_a['Basic Pay']:,.0f}")
+                ec2.metric("Hard Area Allowance", f"Rs. {data_b['Hard Area']:,.0f}", f"{data_b['Hard Area'] - data_a['Hard Area']:,.0f}")
+                ec3.metric("House Rent Allowance", f"Rs. {data_b['House Rent Allowance']:,.0f}", f"{data_b['House Rent Allowance'] - data_a['House Rent Allowance']:,.0f}")
+                ec4.metric("Gross Pay", f"Rs. {data_b['Gross Pay']:,.0f}", f"{data_b['Gross Pay'] - data_a['Gross Pay']:,.0f}")
+
                 st.divider()
-                st.markdown("#### 🔍 Detailed Breakdown")
+                st.markdown("#### 💸 Deductions (Note: Red arrow means your deduction went up)")
                 dc1, dc2, dc3, dc4 = st.columns(4)
                 dc1.metric("Income Tax", f"Rs. {data_b['Income Tax']:,.0f}", f"{data_b['Income Tax'] - data_a['Income Tax']:,.0f}", delta_color="inverse")
-                dc2.metric("Mess Bill", f"Rs. {data_b['Mess Bill']:,.0f}", f"{data_b['Mess Bill'] - data_a['Mess Bill']:,.0f}", delta_color="inverse")
-                dc3.metric("Hard Area Allowance", f"Rs. {data_b['Hard Area']:,.0f}", f"{data_b['Hard Area'] - data_a['Hard Area']:,.0f}")
-                dc4.metric("PF Deduction", f"Rs. {data_b['PF Deduction']:,.0f}", f"{data_b['PF Deduction'] - data_a['PF Deduction']:,.0f}", delta_color="inverse")
+                dc2.metric("PF Deduction", f"Rs. {data_b['PF Deduction']:,.0f}", f"{data_b['PF Deduction'] - data_a['PF Deduction']:,.0f}", delta_color="inverse")
+                dc3.metric("House Rent Deduction", f"Rs. {data_b['House Rent Deduction']:,.0f}", f"{data_b['House Rent Deduction'] - data_a['House Rent Deduction']:,.0f}", delta_color="inverse")
+                dc4.metric("Total Deductions", f"Rs. {data_b['Total Deductions']:,.0f}", f"{data_b['Total Deductions'] - data_a['Total Deductions']:,.0f}", delta_color="inverse")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                dc5, dc6, dc7, dc8 = st.columns(4)
+                dc5.metric("Mess Bill", f"Rs. {data_b['Mess Bill']:,.0f}", f"{data_b['Mess Bill'] - data_a['Mess Bill']:,.0f}", delta_color="inverse")
+                dc6.metric("Club Bill", f"Rs. {data_b['Club Bill']:,.0f}", f"{data_b['Club Bill'] - data_a['Club Bill']:,.0f}", delta_color="inverse")
+                dc7.metric("EOBI", f"Rs. {data_b['EOBI']:,.0f}", f"{data_b['EOBI'] - data_a['EOBI']:,.0f}", delta_color="inverse")
+                # Net Pay is an earning, so it keeps standard green-is-good coloring
+                dc8.metric("Net Pay (Take Home)", f"Rs. {data_b['Net Pay']:,.0f}", f"{data_b['Net Pay'] - data_a['Net Pay']:,.0f}")
 
         with tab5:
             st.subheader("Raw Extracted Data")
