@@ -104,11 +104,33 @@ def fetch_salary_data():
             "Leave Balance": extract_amount("Annual Leave", body_text)
         })
 
+    # --- MANUAL INJECTION FOR MISSING EMAIL ---
+    salary_records.append({
+        "Month": "MAR-2025",
+        "Basic Pay": 33265.0,
+        "Hard Area": 13306.0,
+        "House Rent Allowance": 9980.0,
+        "Gross Pay": 326121.0,
+        "Mess Bill": 9851.0,
+        "Club Bill": 1790.0,
+        "Income Tax": 14020.0,
+        "House Rent Deduction": 750.0,
+        "EOBI": 80.0,
+        "PF Deduction": 2771.0,
+        "Total Deductions": 29262.0,
+        "Net Pay": 296859.0,
+        "PF Employee Bal": 2771.0, 
+        "PF Company Bal": 2771.0,
+        "Leave Balance": 0.0
+    })
+    # ------------------------------------------
+
     df = pd.DataFrame(salary_records)
     
     if not df.empty:
         df['Date'] = pd.to_datetime(df['Month'], format='%b-%Y', errors='coerce')
         df = df.dropna(subset=['Date'])
+        # Sort chronologically so manual injection drops into the exact right place
         df = df.sort_values('Date').reset_index(drop=True)
         df['Month_Name'] = df['Date'].dt.strftime('%b').str.upper()
         df['Year'] = df['Date'].dt.year
