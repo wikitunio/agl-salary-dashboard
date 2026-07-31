@@ -6,7 +6,7 @@ import re
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-# --- PAGE CONFIGURATION (Makes it look wide and professional) ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AGL Salary Portal", page_icon="💸", layout="wide")
 
 def check_password():
@@ -50,12 +50,15 @@ def fetch_salary_data():
     salary_records = []
 
     def extract_amount(label, text):
-        # NEW REGEX FIX: \D*? ignores all hidden symbols (like | or line breaks) until it hits the digits
-        pattern = rf"{label}\D*?([\d,]+)"
+        # Updated Regex to capture decimals (for Annual Leave) as floats
+        pattern = rf"{label}\D*?([\d,\.]+)"
         match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
         if match:
-            return int(match.group(1).replace(',', ''))
-        return 0
+            try:
+                return float(match.group(1).replace(',', ''))
+            except ValueError:
+                return 0.0
+        return 0.0
 
     for msg in messages:
         msg_data = service.users().messages().get(userId='me', id=msg['id'], format='full').execute()
@@ -66,7 +69,6 @@ def fetch_salary_data():
         month = month_match.group(1) if month_match else "Unknown Month"
 
         body_text = ""
-        # Gets the email body and strips out HTML code if present to leave clean text
         if 'parts' in msg_data['payload']:
             for part in msg_data['payload']['parts']:
                 if part['mimeType'] == 'text/plain':
@@ -77,7 +79,7 @@ def fetch_salary_data():
                     data = part['body'].get('data')
                     if data:
                         html_text = base64.urlsafe_b64decode(data).decode('utf-8')
-                        body_text += re.sub('<[^<]+>', ' ', html_text) # Strip HTML tags
+                        body_text += re.sub('<[^<]+>', ' ', html_text)
         else:
             data = msg_data['payload']['body'].get('data')
             if data:
@@ -87,63 +89,142 @@ def fetch_salary_data():
         salary_records.append({
             "Month": month,
             "Basic Pay": extract_amount("Basic Salary", body_text),
+            "Hard Area": extract_amount("Hard Area Allowance", body_text),
+            "House Rent Allowance": extract_amount("House Rent Allowance", body_text),
             "Gross Pay": extract_amount("Gross Pay", body_text),
+            "Mess Bill": extract_amount("Mess Bill New", body_text),
+            "Club Bill": extract_amount("Club Bill", body_text),
+            "Income Tax": extract_amount("Income Tax", body_text),
+            "House Rent Deduction": extract_amount("House Rent Deduction", body_text),
+            "EOBI": extract_amount("EOBI", body_text),
+            "PF Deduction": extract_amount("Provident Fund Employee Cont", body_text),
             "Total Deductions": extract_amount("Total Deductions", body_text),
-            "Net Pay": extract_amount("Net Pay Transferred to Bank", body_text)
+            "Net Pay": extract_amount("Net Pay Transferred to Bank", body_text),
+            "PF Employee Bal": extract_amount("PF Employee Contribution", body_text),
+            "PF Company Bal": extract_amount("PF Company Contribution", body_text),
+            "Leave Balance": extract_amount("Annual Leave", body_text)
         })
 
     df = pd.DataFrame(salary_records)
     
-    # NEW FIX: Convert Month strings to actual dates and sort them chronologically
     if not df.empty:
         df['Date'] = pd.to_datetime(df['Month'], format='%b-%Y', errors='coerce')
-        df = df.dropna(subset=['Date']) # Removes "Unknown Month" errors
+        df = df.dropna(subset=['Date'])
         df = df.sort_values('Date').reset_index(drop=True)
+        df['Year'] = df['Date'].dt.year
     
     return df
 
 def main():
     if check_password():
+        # --- TOP HEADER ---
         st.title("📊 AGL Salary & Compensation Portal")
-        st.markdown("---")
-
+        
         with st.spinner("Securely synchronizing with Gmail..."):
             df = fetch_salary_data()
 
-        if not df.empty:
-            st.subheader(f"Latest Overview: {df['Month'].iloc[-1]}")
-            
-            # Formatted Metrics
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Net Pay Transferred", f"Rs. {df['Net Pay'].iloc[-1]:,}")
-            col2.metric("Gross Pay", f"Rs. {df['Gross Pay'].iloc[-1]:,}")
-            col3.metric("Total Deductions", f"Rs. {df['Total Deductions'].iloc[-1]:,}")
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Side-by-side Charts
-            col_chart1, col_chart2 = st.columns(2)
+        if df.empty:
+            st.warning("No valid pay slip data could be parsed. Check email formatting.")
+            return
+
+        # --- SIDEBAR FILTERS ---
+        st.sidebar.title("Controls")
+        years = sorted(df['Year'].unique(), reverse=True)
+        selected_years = st.sidebar.multiselect("Filter by Year", options=years, default=years)
+        
+        # Apply filter
+        df_filtered = df[df['Year'].isin(selected_years)]
+        
+        if df_filtered.empty:
+            st.warning("No data for the selected year(s).")
+            return
+
+        latest_record = df_filtered.iloc[-1]
+
+        # --- TOP LEVEL METRICS ---
+        st.markdown("### 📈 Latest Month Snapshot")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Net Pay Transferred", f"Rs. {latest_record['Net Pay']:,.0f}")
+        col2.metric("Gross Pay", f"Rs. {latest_record['Gross Pay']:,.0f}")
+        col3.metric("Total Deductions", f"Rs. {latest_record['Total Deductions']:,.0f}")
+        col4.metric("Annual Leave Balance", f"{latest_record['Leave Balance']} Days")
+        
+        st.markdown("---")
+
+        # --- ORGANIZED TABS ---
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "💰 Pay Overview", 
+            "🏠 Living & Allowances", 
+            "🚀 Wealth & Forecast", 
+            "🗄️ Raw Data & Export"
+        ])
+
+        # TAB 1: Core Salary Breakdown
+        with tab1:
+            col_chart1, col_chart2 = st.columns([2, 1])
             
             with col_chart1:
                 st.subheader("Net Pay History")
-                fig_net = px.line(df, x="Month", y="Net Pay", markers=True, template="plotly_white")
+                fig_net = px.line(df_filtered, x="Month", y="Net Pay", markers=True, template="plotly_white")
                 fig_net.update_traces(line_color='#2ca02c', line_width=3, marker=dict(size=8))
-                fig_net.update_layout(xaxis_title="", yaxis_title="Rupees (PKR)", plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_net, use_container_width=True)
 
             with col_chart2:
-                st.subheader("Earnings vs Deductions")
-                fig_bar = px.bar(df, x="Month", y=["Gross Pay", "Total Deductions"], barmode="group", template="plotly_white")
-                fig_bar.update_layout(xaxis_title="", yaxis_title="Rupees (PKR)", legend_title="", plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.subheader("Deduction Breakdown")
+                deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
+                deduction_values = [latest_record[label] for label in deduction_labels]
+                
+                fig_pie = px.pie(names=deduction_labels, values=deduction_values, hole=0.4, template="plotly_white")
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                fig_pie.update_layout(showlegend=False)
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+        # TAB 2: Cost of Living at Site
+        with tab2:
+            st.subheader("Site Expenses vs. Hard Area Allowance")
+            st.markdown("Comparing your monthly Mess & Club bills against your site allowance.")
             
-            st.markdown("---")
-            with st.expander("View Raw Data Table"):
-                # Hide the helper 'Date' column from the final table
-                display_df = df.drop(columns=['Date'])
-                st.dataframe(display_df, use_container_width=True)
-        else:
-            st.warning("No valid pay slip data could be parsed. Check email formatting.")
+            fig_living = px.line(df_filtered, x="Month", y=["Hard Area", "Mess Bill", "Club Bill"], 
+                                 markers=True, template="plotly_white")
+            fig_living.update_layout(yaxis_title="Rupees (PKR)", legend_title="Category")
+            st.plotly_chart(fig_living, use_container_width=True)
+
+        # TAB 3: Long Term Wealth & Forecasting
+        with tab3:
+            col_pf, col_forecast = st.columns([2, 1])
+            
+            with col_pf:
+                st.subheader("Provident Fund Growth")
+                # Area chart for cumulative wealth
+                fig_pf = px.area(df_filtered, x="Month", y=["PF Employee Bal", "PF Company Bal"], 
+                                 template="plotly_white", color_discrete_sequence=['#1f77b4', '#aec7e8'])
+                fig_pf.update_layout(yaxis_title="Total Balance (PKR)", legend_title="Contribution Source")
+                st.plotly_chart(fig_pf, use_container_width=True)
+            
+            with col_forecast:
+                st.subheader("Annualized Run Rate")
+                st.markdown("Based on your most recent payslip, here is your trajectory for a 12-month fiscal year:")
+                st.info(f"**Projected Net Take-Home:** Rs. {latest_record['Net Pay'] * 12:,.0f}")
+                st.warning(f"**Projected Tax Burden:** Rs. {latest_record['Income Tax'] * 12:,.0f}")
+                
+                savings_rate = (latest_record['PF Deduction'] / latest_record['Gross Pay']) * 100
+                st.success(f"**Current PF Savings Rate:** {savings_rate:.1f}% of Gross Pay")
+
+        # TAB 4: Data & Export
+        with tab4:
+            st.subheader("Raw Extracted Data")
+            display_df = df_filtered.drop(columns=['Date', 'Year'])
+            st.dataframe(display_df, use_container_width=True)
+            
+            # Export to CSV button
+            csv = display_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Data as CSV",
+                data=csv,
+                file_name=f"agl_salary_data_{latest_record['Month']}.csv",
+                mime="text/csv",
+            )
 
 if __name__ == '__main__':
     main()
+    
