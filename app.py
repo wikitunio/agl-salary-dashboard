@@ -7,22 +7,8 @@ import re
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-# --- PAGE CONFIGURATION & UI STYLING ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AGL Salary Portal", page_icon="🏭", layout="wide")
-
-# Inject Custom CSS for graceful metric cards
-st.markdown("""
-<style>
-div[data-testid="metric-container"] {
-    background-color: #ffffff;
-    border: 1px solid #e0e4eb;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-    border-left: 5px solid #2ca02c;
-}
-</style>
-""", unsafe_allow_html=True)
 
 def check_password():
     def password_entered():
@@ -148,9 +134,6 @@ def main():
         if df.empty:
             st.warning("No valid pay slip data could be parsed. Check email formatting.")
             return
-            
-        # Success Toast Notification
-        st.toast("✅ Secure connection established! Data synced.", icon="🚀")
 
         # --- SIDEBAR CONTROLS ---
         st.sidebar.markdown("### ⚙️ Financial Engine")
@@ -169,15 +152,6 @@ def main():
         
         month_data = df_fy[df_fy['Month_Name'] == selected_month].iloc[0]
 
-        # --- YoY INCREMENT DETECTOR ---
-        prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
-        if not prev_year_month.empty:
-            prev_basic = prev_year_month.iloc[0]['Basic Pay']
-            delta_basic = month_data['Basic Pay'] - prev_basic
-            delta_pct = f"{(delta_basic / prev_basic) * 100:.1f}% YoY" if prev_basic > 0 else None
-        else:
-            delta_pct = None
-
         # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
         st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
         
@@ -193,7 +167,7 @@ def main():
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}", delta=delta_pct)
+        col_m1.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}")
         col_m2.metric("Monthly Net Pay", f"Rs. {month_data['Net Pay']:,.0f}")
         col_m3.metric("Monthly Income Tax", f"Rs. {month_data['Income Tax']:,.0f}")
         col_m4.metric("Leave Balance", f"{month_data['Leave Balance']} Days")
@@ -201,10 +175,11 @@ def main():
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- SECTION 3: TABS & CHARTS ---
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
+            "⚖️ Compare Months",
             "🗄️ Raw Data Export"
         ])
 
@@ -286,6 +261,42 @@ def main():
             st.plotly_chart(fig_pf, use_container_width=True)
 
         with tab4:
+            st.subheader("⚖️ Month-to-Month Comparison")
+            st.markdown("Select any two months from your entire history to see exact changes in your compensation.")
+            
+            # Use all available months sorted chronologically (newest first)
+            all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
+            
+            col_comp1, col_comp2 = st.columns(2)
+            with col_comp1:
+                month_a = st.selectbox("Baseline Month (Month A)", options=all_months_sorted, index=min(1, len(all_months_sorted)-1))
+            with col_comp2:
+                month_b = st.selectbox("Comparison Month (Month B)", options=all_months_sorted, index=0)
+                
+            if month_a and month_b:
+                data_a = df[df['Month'] == month_a].iloc[0]
+                data_b = df[df['Month'] == month_b].iloc[0]
+                
+                st.markdown(f"#### 📈 Shift from {month_a} to {month_b}")
+                
+                mc1, mc2, mc3, mc4 = st.columns(4)
+                # For earnings, higher is better (default delta color)
+                mc1.metric("Basic Pay", f"Rs. {data_b['Basic Pay']:,.0f}", f"{data_b['Basic Pay'] - data_a['Basic Pay']:,.0f}")
+                mc2.metric("Gross Pay", f"Rs. {data_b['Gross Pay']:,.0f}", f"{data_b['Gross Pay'] - data_a['Gross Pay']:,.0f}")
+                mc3.metric("Net Pay", f"Rs. {data_b['Net Pay']:,.0f}", f"{data_b['Net Pay'] - data_a['Net Pay']:,.0f}")
+                
+                # For deductions, an increase is technically a negative impact on take-home pay, so we use delta_color="inverse"
+                mc4.metric("Total Deductions", f"Rs. {data_b['Total Deductions']:,.0f}", f"{data_b['Total Deductions'] - data_a['Total Deductions']:,.0f}", delta_color="inverse")
+                
+                st.divider()
+                st.markdown("#### 🔍 Detailed Breakdown")
+                dc1, dc2, dc3, dc4 = st.columns(4)
+                dc1.metric("Income Tax", f"Rs. {data_b['Income Tax']:,.0f}", f"{data_b['Income Tax'] - data_a['Income Tax']:,.0f}", delta_color="inverse")
+                dc2.metric("Mess Bill", f"Rs. {data_b['Mess Bill']:,.0f}", f"{data_b['Mess Bill'] - data_a['Mess Bill']:,.0f}", delta_color="inverse")
+                dc3.metric("Hard Area Allowance", f"Rs. {data_b['Hard Area']:,.0f}", f"{data_b['Hard Area'] - data_a['Hard Area']:,.0f}")
+                dc4.metric("PF Deduction", f"Rs. {data_b['PF Deduction']:,.0f}", f"{data_b['PF Deduction'] - data_a['PF Deduction']:,.0f}", delta_color="inverse")
+
+        with tab5:
             st.subheader("Raw Extracted Data")
             display_df = df.drop(columns=['Date', 'Month_Name'])
             st.dataframe(display_df, use_container_width=True)
