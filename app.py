@@ -113,6 +113,11 @@ def fetch_salary_data():
         df['Month_Name'] = df['Date'].dt.strftime('%b').str.upper()
         df['Year'] = df['Date'].dt.year
         
+        # Automatically calculate any unmapped allowances
+        df['Other Allowances'] = df['Gross Pay'] - (df['Basic Pay'] + df['Hard Area'] + df['House Rent Allowance'])
+        # Prevent negative values in case of extraction errors
+        df['Other Allowances'] = df['Other Allowances'].apply(lambda x: max(0, x))
+        
         def get_fy(date):
             if date.month >= 7:
                 return f"FY {date.year}-{str(date.year + 1)[-2:]}"
@@ -152,14 +157,30 @@ def main():
         
         month_data = df_fy[df_fy['Month_Name'] == selected_month].iloc[0]
         
-        # --- YoY INCREMENT DETECTOR ---
+        # --- DELTA ENGINE (YoY & MoM) ---
         prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
-        if not prev_year_month.empty:
-            prev_basic = prev_year_month.iloc[0]['Basic Pay']
-            delta_basic = month_data['Basic Pay'] - prev_basic
-            delta_pct = f"{(delta_basic / prev_basic) * 100:.1f}% YoY" if prev_basic > 0 else None
-        else:
-            delta_pct = None
+        
+        current_index = df[df['Date'] == month_data['Date']].index[0]
+        prev_month_data = df.iloc[current_index - 1] if current_index > 0 else None
+
+        def get_yoy_delta(metric):
+            if not prev_year_month.empty:
+                prev_val = prev_year_month.iloc[0][metric]
+                curr_val = month_data[metric]
+                if prev_val > 0:
+                    pct = ((curr_val - prev_val) / prev_val) * 100
+                    sign = "+" if pct >= 0 else ""
+                    return f"{sign}{pct:.1f}% YoY"
+            return None
+
+        def get_mom_delta(metric):
+            if prev_month_data is not None:
+                prev_val = prev_month_data[metric]
+                curr_val = month_data[metric]
+                diff = curr_val - prev_val
+                sign = "+" if diff >= 0 else ""
+                return f"{sign}{diff:,.0f} MoM"
+            return None
 
         # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
         st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
@@ -172,24 +193,30 @@ def main():
         
         st.divider()
 
-        # --- SECTION 2: FOCUS MONTH (EXPANDED) ---
+        # --- SECTION 2: FOCUS MONTH (DYNAMIC SNAPSHOT) ---
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         
-        # Top Row (High Level)
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Gross Pay", f"Rs. {month_data['Gross Pay']:,.0f}")
-        col_m2.metric("Total Deductions", f"Rs. {month_data['Total Deductions']:,.0f}")
-        col_m3.metric("Net Pay Transferred", f"Rs. {month_data['Net Pay']:,.0f}")
-        col_m4.metric("Leave Balance", f"{month_data['Leave Balance']} Days")
+        st.markdown("##### 💰 Earnings (Year-over-Year Tracking)")
+        earn1, earn2, earn3, earn4, earn5 = st.columns(5)
+        earn1.metric("Gross Pay", f"Rs. {month_data['Gross Pay']:,.0f}", delta=get_yoy_delta("Gross Pay"))
+        earn2.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}", delta=get_yoy_delta("Basic Pay"))
+        earn3.metric("Hard Area", f"Rs. {month_data['Hard Area']:,.0f}", delta=get_yoy_delta("Hard Area"))
+        earn4.metric("House Rent", f"Rs. {month_data['House Rent Allowance']:,.0f}", delta=get_yoy_delta("House Rent Allowance"))
+        earn5.metric("Other Allowances", f"Rs. {month_data['Other Allowances']:,.0f}", delta=get_yoy_delta("Other Allowances"))
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Bottom Row (Detailed)
-        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
-        col_m5.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}", delta=delta_pct)
-        col_m6.metric("Hard Area Allowance", f"Rs. {month_data['Hard Area']:,.0f}")
-        col_m7.metric("Income Tax", f"Rs. {month_data['Income Tax']:,.0f}")
-        col_m8.metric("Mess Bill", f"Rs. {month_data['Mess Bill']:,.0f}")
+        st.markdown("##### 💸 Deductions (Month-over-Month Tracking)")
+        ded1, ded2, ded3, ded4, ded5 = st.columns(5)
+        ded1.metric("Income Tax", f"Rs. {month_data['Income Tax']:,.0f}", delta=get_mom_delta("Income Tax"), delta_color="inverse")
+        ded2.metric("Mess Bill", f"Rs. {month_data['Mess Bill']:,.0f}", delta=get_mom_delta("Mess Bill"), delta_color="inverse")
+        ded3.metric("Club Bill", f"Rs. {month_data['Club Bill']:,.0f}", delta=get_mom_delta("Club Bill"), delta_color="inverse")
+        ded4.metric("Rent Deduction", f"Rs. {month_data['House Rent Deduction']:,.0f}", delta=get_mom_delta("House Rent Deduction"), delta_color="inverse")
+        ded5.metric("EOBI", f"Rs. {month_data['EOBI']:,.0f}", delta=get_mom_delta("EOBI"), delta_color="inverse")
+
+        st.markdown("##### 🏦 Net Transfer & Balance")
+        net1, net2, net3 = st.columns(3)
+        net1.metric("Total Deductions", f"Rs. {month_data['Total Deductions']:,.0f}", delta=get_mom_delta("Total Deductions"), delta_color="inverse")
+        net2.metric("Net Pay (Take Home)", f"Rs. {month_data['Net Pay']:,.0f}", delta=get_mom_delta("Net Pay"))
+        net3.metric("Leave Balance", f"{month_data['Leave Balance']} Days", delta=get_mom_delta("Leave Balance"))
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -218,7 +245,7 @@ def main():
                 known_sum = sum(fy_deduction_values)
                 unaccounted_deductions = month_data['Total Deductions'] - known_sum
                 
-                if unaccounted_deductions > 5: # using 5 to ignore tiny rounding errors
+                if unaccounted_deductions > 5:
                     deduction_labels.append("⚠️ Unmapped Deductions")
                     fy_deduction_values.append(unaccounted_deductions)
                     st.warning(f"Detected Rs. {unaccounted_deductions:,.0f} in unmapped deductions this month!")
@@ -264,9 +291,9 @@ def main():
                         'borderwidth': 2,
                         'bordercolor': "gray",
                         'steps': [
-                            {'range': [0, 50], 'color': "rgba(44, 160, 44, 0.6)"}, # Green
-                            {'range': [50, 80], 'color': "rgba(255, 165, 0, 0.6)"}, # Orange
-                            {'range': [80, 100], 'color': "rgba(214, 39, 40, 0.6)"}], # Red
+                            {'range': [0, 50], 'color': "rgba(44, 160, 44, 0.6)"}, 
+                            {'range': [50, 80], 'color': "rgba(255, 165, 0, 0.6)"}, 
+                            {'range': [80, 100], 'color': "rgba(214, 39, 40, 0.6)"}], 
                         'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': ratio}
                     }
                 ))
@@ -277,8 +304,7 @@ def main():
             st.subheader("🎓 Master's Degree Fund (PF Accumulation)")
             st.markdown("Tracking your total all-time Provident Fund wealth against an academic savings milestone.")
             
-            # Master's Degree Milestone Target
-            MASTERS_TARGET = 3000000  # 3 Million PKR Target
+            MASTERS_TARGET = 3000000 
             current_total_pf = month_data['PF Employee Bal'] + month_data['PF Company Bal']
             progress_pct = min((current_total_pf / MASTERS_TARGET), 1.0)
             
@@ -325,7 +351,6 @@ def main():
                 dc5.metric("Mess Bill", f"Rs. {data_b['Mess Bill']:,.0f}", f"{data_b['Mess Bill'] - data_a['Mess Bill']:,.0f}", delta_color="inverse")
                 dc6.metric("Club Bill", f"Rs. {data_b['Club Bill']:,.0f}", f"{data_b['Club Bill'] - data_a['Club Bill']:,.0f}", delta_color="inverse")
                 dc7.metric("EOBI", f"Rs. {data_b['EOBI']:,.0f}", f"{data_b['EOBI'] - data_a['EOBI']:,.0f}", delta_color="inverse")
-                # Net Pay is an earning, so it keeps standard green-is-good coloring
                 dc8.metric("Net Pay (Take Home)", f"Rs. {data_b['Net Pay']:,.0f}", f"{data_b['Net Pay'] - data_a['Net Pay']:,.0f}")
 
         with tab5:
