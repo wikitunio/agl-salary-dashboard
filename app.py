@@ -90,6 +90,8 @@ def fetch_salary_data():
             "Basic Pay": extract_amount("Basic Salary", body_text),
             "Hard Area": extract_amount("Hard Area Allowance", body_text),
             "House Rent Allowance": extract_amount("House Rent Allowance", body_text),
+            "Other Earnings": extract_amount("Other Earnings", body_text),
+            "Salary Arrears": extract_amount("Salary Arrears", body_text),
             "Gross Pay": extract_amount("Gross Pay", body_text),
             "Mess Bill": extract_amount("Mess Bill New", body_text),
             "Club Bill": extract_amount("Club Bill", body_text),
@@ -110,6 +112,8 @@ def fetch_salary_data():
         "Basic Pay": 33265.0,
         "Hard Area": 13306.0,
         "House Rent Allowance": 9980.0,
+        "Other Earnings": 266120.0,
+        "Salary Arrears": 0.0,
         "Gross Pay": 326121.0,
         "Mess Bill": 9851.0,
         "Club Bill": 1790.0,
@@ -135,9 +139,8 @@ def fetch_salary_data():
         df['Month_Name'] = df['Date'].dt.strftime('%b').str.upper()
         df['Year'] = df['Date'].dt.year
         
-        # Automatically calculate any unmapped allowances
-        df['Other Allowances'] = df['Gross Pay'] - (df['Basic Pay'] + df['Hard Area'] + df['House Rent Allowance'])
-        # Prevent negative values in case of extraction errors
+        # Automatically calculate any unmapped allowances to avoid math errors
+        df['Other Allowances'] = df['Gross Pay'] - (df['Basic Pay'] + df['Hard Area'] + df['House Rent Allowance'] + df['Other Earnings'] + df['Salary Arrears'])
         df['Other Allowances'] = df['Other Allowances'].apply(lambda x: max(0, x))
         
         def get_fy(date):
@@ -219,12 +222,16 @@ def main():
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         
         st.markdown("##### 💰 Earnings (Year-over-Year Tracking)")
-        earn1, earn2, earn3, earn4, earn5 = st.columns(5)
+        earn1, earn2, earn3, earn4 = st.columns(4)
         earn1.metric("Gross Pay", f"Rs. {month_data['Gross Pay']:,.0f}", delta=get_yoy_delta("Gross Pay"))
         earn2.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}", delta=get_yoy_delta("Basic Pay"))
         earn3.metric("Hard Area", f"Rs. {month_data['Hard Area']:,.0f}", delta=get_yoy_delta("Hard Area"))
         earn4.metric("House Rent", f"Rs. {month_data['House Rent Allowance']:,.0f}", delta=get_yoy_delta("House Rent Allowance"))
-        earn5.metric("Other Allowances", f"Rs. {month_data['Other Allowances']:,.0f}", delta=get_yoy_delta("Other Allowances"))
+        
+        earn5, earn6, earn7 = st.columns(3)
+        earn5.metric("Other Earnings", f"Rs. {month_data['Other Earnings']:,.0f}", delta=get_yoy_delta("Other Earnings"))
+        earn6.metric("Salary Arrears", f"Rs. {month_data['Salary Arrears']:,.0f}", delta=get_yoy_delta("Salary Arrears"))
+        earn7.metric("Other Allowances", f"Rs. {month_data['Other Allowances']:,.0f}", delta=get_yoy_delta("Other Allowances"))
 
         st.markdown("##### 💸 Deductions (Month-over-Month Tracking)")
         ded1, ded2, ded3, ded4, ded5 = st.columns(5)
@@ -359,6 +366,11 @@ def main():
                 ec2.metric("Hard Area Allowance", f"Rs. {data_b['Hard Area']:,.0f}", f"{data_b['Hard Area'] - data_a['Hard Area']:,.0f}")
                 ec3.metric("House Rent Allowance", f"Rs. {data_b['House Rent Allowance']:,.0f}", f"{data_b['House Rent Allowance'] - data_a['House Rent Allowance']:,.0f}")
                 ec4.metric("Gross Pay", f"Rs. {data_b['Gross Pay']:,.0f}", f"{data_b['Gross Pay'] - data_a['Gross Pay']:,.0f}")
+
+                ec5, ec6, ec7, ec8 = st.columns(4)
+                ec5.metric("Other Earnings", f"Rs. {data_b['Other Earnings']:,.0f}", f"{data_b['Other Earnings'] - data_a['Other Earnings']:,.0f}")
+                ec6.metric("Salary Arrears", f"Rs. {data_b['Salary Arrears']:,.0f}", f"{data_b['Salary Arrears'] - data_a['Salary Arrears']:,.0f}")
+                ec7.metric("Other Allowances", f"Rs. {data_b['Other Allowances']:,.0f}", f"{data_b['Other Allowances'] - data_a['Other Allowances']:,.0f}")
 
                 st.divider()
                 st.markdown("#### 💸 Deductions (Note: Red arrow means your deduction went up)")
