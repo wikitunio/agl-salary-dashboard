@@ -7,22 +7,107 @@ import re
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-# --- PAGE CONFIGURATION & UI STYLING ---
-st.set_page_config(page_title="AGL Salary Portal", page_icon="🏭", layout="wide")
+# --- PAGE CONFIGURATION ---
+st.set_page_config(page_title="AGL Salary Portal", page_icon="💳", layout="wide")
 
-# Inject Custom CSS for graceful metric cards
+# --- CONCEPTZILLA DRIBBBLE STYLING (CUSTOM CSS) ---
 st.markdown("""
 <style>
-div[data-testid="metric-container"] {
-    background-color: #ffffff;
-    border: 1px solid #e0e4eb;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-    border-left: 5px solid #2ca02c;
-}
+    /* Import Inter Font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    /* Global App Background & Font */
+    .stApp {
+        background-color: #F4F7FE;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: #FFFFFF;
+        box-shadow: 2px 0 20px rgba(0,0,0,0.03);
+    }
+    
+    /* Headers (Deep Navy) */
+    h1, h2, h3, h4 {
+        color: #2B3674 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.5px;
+    }
+    
+    /* Metric Cards (Floating White Cards) */
+    div[data-testid="metric-container"] {
+        background-color: #FFFFFF;
+        padding: 20px 25px;
+        border-radius: 20px;
+        box-shadow: 0px 10px 20px rgba(211, 218, 230, 0.4);
+        border: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0px 15px 25px rgba(211, 218, 230, 0.6);
+    }
+    
+    /* Metric Card Labels (Muted Blue-Grey) */
+    div[data-testid="metric-container"] label {
+        color: #A3AED0 !important;
+        font-weight: 500 !important;
+        font-size: 15px !important;
+    }
+    
+    /* Metric Card Values (Deep Navy) */
+    div[data-testid="metric-container"] div[data-testid="stMetricValue"] > div {
+        color: #2B3674 !important;
+        font-weight: 800 !important;
+        font-size: 32px !important;
+    }
+    
+    /* Metric Card Delta (Emerald Green) */
+    div[data-testid="stMetricDelta"] svg {
+        color: #01B574 !important;
+    }
+    div[data-testid="stMetricDelta"] > div {
+        color: #01B574 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: transparent;
+        border-radius: 10px;
+        color: #A3AED0;
+        font-weight: 600;
+        padding: 10px 20px;
+        border: none !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #4318FF !important;
+        color: white !important;
+        border-radius: 12px !important;
+        box-shadow: 0px 4px 10px rgba(67, 24, 255, 0.3);
+    }
+    
+    /* Divider */
+    hr {
+        border-color: #E6EDF9 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# --- THEME COLORS FOR PLOTLY ---
+COLOR_PRIMARY = "#4318FF"  # Electric Purple
+COLOR_SECONDARY = "#6AD2FF" # Vibrant Cyan
+COLOR_SUCCESS = "#01B574"  # Emerald Green
+COLOR_WARNING = "#FFB547"  # Orange
+COLOR_DANGER = "#EE5D50"   # Red
+COLOR_TEXT = "#2B3674"
+COLOR_GRID = "#E6EDF9"
 
 def check_password():
     def password_entered():
@@ -33,11 +118,11 @@ def check_password():
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.markdown("<h2 style='text-align: center;'>🔒 Secure Login</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #4318FF !important;'>🔒 Secure Login</h2>", unsafe_allow_html=True)
         st.text_input("Enter Dashboard Password", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        st.markdown("<h2 style='text-align: center;'>🔒 Secure Login</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #4318FF !important;'>🔒 Secure Login</h2>", unsafe_allow_html=True)
         st.text_input("Enter Dashboard Password", type="password", on_change=password_entered, key="password")
         st.error("😕 Password incorrect")
         return False
@@ -137,10 +222,23 @@ def fetch_salary_data():
     
     return df
 
+# Helper to style Plotly charts
+def style_plotly_fig(fig):
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(family="Inter, sans-serif", color="#A3AED0"),
+        title_font=dict(color=COLOR_TEXT, size=18, family="Inter, sans-serif"),
+        legend=dict(font=dict(color="#A3AED0")),
+        xaxis=dict(gridcolor=COLOR_GRID, zerolinecolor=COLOR_GRID),
+        yaxis=dict(gridcolor=COLOR_GRID, zerolinecolor=COLOR_GRID)
+    )
+    return fig
+
 def main():
     if check_password():
         # --- BRANDING & HEADER ---
-        st.markdown("<h1>🏭 AgriTech Ltd <span style='font-size:24px; color:gray;'>| Executive Compensation Portal</span></h1>", unsafe_allow_html=True)
+        st.markdown(f"<h1>💳 AgriTech Executive <span style='color:{COLOR_PRIMARY};'>Finances</span></h1>", unsafe_allow_html=True)
         
         with st.spinner("Synchronizing securely with Gmail..."):
             df = fetch_salary_data()
@@ -148,13 +246,9 @@ def main():
         if df.empty:
             st.warning("No valid pay slip data could be parsed. Check email formatting.")
             return
-            
-        # Success Toast Notification
-        st.toast("✅ Secure connection established! Data synced.", icon="🚀")
 
         # --- SIDEBAR CONTROLS ---
-        st.sidebar.markdown("### ⚙️ Financial Engine")
-        st.sidebar.markdown("Isolate a specific tax cycle.")
+        st.sidebar.markdown(f"<h2 style='color:{COLOR_PRIMARY} !important;'>⚙️ Engine Controls</h2>", unsafe_allow_html=True)
         
         available_fys = sorted(df['FY'].unique(), reverse=True)
         selected_fy = st.sidebar.selectbox("1. Select Financial Year", options=available_fys)
@@ -211,38 +305,46 @@ def main():
         with tab1:
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
+                st.markdown("<div style='background: white; padding: 20px; border-radius: 20px; box-shadow: 0px 10px 20px rgba(211,218,230,0.4);'>", unsafe_allow_html=True)
                 st.subheader(f"Earnings Curve ({selected_fy})")
-                fig_net = px.line(df_fy, x="Month", y=["Gross Pay", "Net Pay"], markers=True, template="plotly_white")
+                fig_net = px.line(df_fy, x="Month", y=["Gross Pay", "Net Pay"], markers=True)
+                fig_net.update_traces(line_color=COLOR_PRIMARY, selector=dict(name="Gross Pay"), line_width=4, marker=dict(size=8))
+                fig_net.update_traces(line_color=COLOR_SECONDARY, selector=dict(name="Net Pay"), line_width=4, marker=dict(size=8))
                 fig_net.update_layout(yaxis_title="Rupees (PKR)", legend_title="", margin=dict(l=0, r=0, t=30, b=0))
-                st.plotly_chart(fig_net, use_container_width=True)
+                st.plotly_chart(style_plotly_fig(fig_net), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                
             with col_chart2:
+                st.markdown("<div style='background: white; padding: 20px; border-radius: 20px; box-shadow: 0px 10px 20px rgba(211,218,230,0.4);'>", unsafe_allow_html=True)
                 st.subheader("Deduction Slice")
                 deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
                 fy_deduction_values = [month_data[label] for label in deduction_labels]
                 
-                fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.5, template="plotly_white")
-                fig_pie.update_traces(textposition='inside', textinfo='percent')
+                fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.6, 
+                                 color_discrete_sequence=[COLOR_PRIMARY, COLOR_SECONDARY, COLOR_SUCCESS, COLOR_WARNING, COLOR_DANGER, "#A3AED0"])
+                fig_pie.update_traces(textposition='inside', textinfo='none', hoverinfo='label+percent')
                 fig_pie.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5))
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(style_plotly_fig(fig_pie), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
         with tab2:
             col_house1, col_house2 = st.columns(2)
             with col_house1:
+                st.markdown("<div style='background: white; padding: 20px; border-radius: 20px; box-shadow: 0px 10px 20px rgba(211,218,230,0.4);'>", unsafe_allow_html=True)
                 st.subheader("Married Quarter Housing Monitor")
-                st.markdown("Tracking the spread between your rent allowance and your payroll deductions.")
                 housing_spread = month_data['House Rent Allowance'] - month_data['House Rent Deduction']
-                st.metric("Net Housing Benefit", f"Rs. {housing_spread:,.0f}", 
-                          help="House Rent Allowance minus House Rent Deduction")
-                
+                st.metric("Net Housing Benefit", f"Rs. {housing_spread:,.0f}", help="House Rent Allowance minus House Rent Deduction")
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 st.subheader(f"Site Expenses ({selected_fy})")
-                fig_living = px.bar(df_fy, x="Month", y=["Mess Bill", "Club Bill"], template="plotly_white", barmode="stack")
-                fig_living.add_scatter(x=df_fy["Month"], y=df_fy["Hard Area"], mode='lines+markers', name='Hard Area Allowance', line=dict(color='green', width=3))
+                fig_living = px.bar(df_fy, x="Month", y=["Mess Bill", "Club Bill"], barmode="stack", color_discrete_sequence=[COLOR_SECONDARY, COLOR_WARNING])
+                fig_living.add_scatter(x=df_fy["Month"], y=df_fy["Hard Area"], mode='lines+markers', name='Hard Area Allowance', line=dict(color=COLOR_SUCCESS, width=4))
                 fig_living.update_layout(yaxis_title="Rupees (PKR)", legend_title="", margin=dict(l=0, r=0, t=0, b=0))
-                st.plotly_chart(fig_living, use_container_width=True)
+                st.plotly_chart(style_plotly_fig(fig_living), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
                 
             with col_house2:
+                st.markdown("<div style='background: white; padding: 20px; border-radius: 20px; box-shadow: 0px 10px 20px rgba(211,218,230,0.4);'>", unsafe_allow_html=True)
                 st.subheader("Expense-to-Income Ratio")
                 total_site_expense = month_data['Mess Bill'] + month_data['Club Bill']
                 hard_area_allowance = month_data['Hard Area']
@@ -251,39 +353,44 @@ def main():
                 fig_gauge = go.Figure(go.Indicator(
                     mode = "gauge+number",
                     value = ratio,
-                    number = {'suffix': "%"},
-                    title = {'text': "Site Expenses vs. Hard Area Allowance"},
+                    number = {'suffix': "%", 'font': {'color': COLOR_TEXT, 'size': 40}},
                     gauge = {
-                        'axis': {'range': [None, 100], 'tickwidth': 1},
-                        'bar': {'color': "rgba(0,0,0,0)"},
+                        'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': COLOR_GRID},
+                        'bar': {'color': COLOR_TEXT},
                         'bgcolor': "white",
-                        'borderwidth': 2,
-                        'bordercolor': "gray",
+                        'borderwidth': 0,
                         'steps': [
-                            {'range': [0, 50], 'color': "rgba(44, 160, 44, 0.6)"}, # Green
-                            {'range': [50, 80], 'color': "rgba(255, 165, 0, 0.6)"}, # Orange
-                            {'range': [80, 100], 'color': "rgba(214, 39, 40, 0.6)"}], # Red
-                        'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': ratio}
+                            {'range': [0, 50], 'color': "rgba(1, 181, 116, 0.2)"}, 
+                            {'range': [50, 80], 'color': "rgba(255, 181, 71, 0.2)"}, 
+                            {'range': [80, 100], 'color': "rgba(238, 93, 80, 0.2)"}], 
+                        'threshold': {'line': {'color': COLOR_DANGER, 'width': 4}, 'thickness': 0.75, 'value': ratio}
                     }
                 ))
                 fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
-                st.plotly_chart(fig_gauge, use_container_width=True)
+                st.plotly_chart(style_plotly_fig(fig_gauge), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
         with tab3:
+            st.markdown("<div style='background: white; padding: 25px; border-radius: 20px; box-shadow: 0px 10px 20px rgba(211,218,230,0.4);'>", unsafe_allow_html=True)
             st.subheader("🎓 Master's Degree Fund (PF Accumulation)")
-            st.markdown("Tracking your total all-time Provident Fund wealth against an academic savings milestone.")
+            st.markdown("<p style='color: #A3AED0;'>Tracking your total all-time Provident Fund wealth against an academic savings milestone.</p>", unsafe_allow_html=True)
             
-            # Master's Degree Milestone Target
-            MASTERS_TARGET = 3000000  # 3 Million PKR Target (Adjustable)
+            MASTERS_TARGET = 3000000  # 3 Million PKR Target
             current_total_pf = month_data['PF Employee Bal'] + month_data['PF Company Bal']
             progress_pct = min((current_total_pf / MASTERS_TARGET), 1.0)
             
-            st.progress(progress_pct)
-            st.caption(f"**Current Milestone Progress:** {progress_pct*100:.1f}% towards Rs. {MASTERS_TARGET:,.0f} goal.")
+            # Custom styled progress bar wrapper
+            st.markdown(f"""
+            <div style="width: 100%; background-color: #E6EDF9; border-radius: 10px; margin-top: 10px; margin-bottom: 5px;">
+              <div style="width: {progress_pct*100}%; background-color: {COLOR_PRIMARY}; height: 12px; border-radius: 10px;"></div>
+            </div>
+            <p style='color: {COLOR_PRIMARY}; font-weight: bold;'>{progress_pct*100:.1f}% towards Rs. {MASTERS_TARGET:,.0f} goal</p>
+            """, unsafe_allow_html=True)
             
-            fig_pf = px.area(df, x="Month", y=["PF Employee Bal", "PF Company Bal"], template="plotly_white", color_discrete_sequence=['#1f77b4', '#aec7e8'])
-            fig_pf.update_layout(yaxis_title="Total Balance (PKR)", legend_title="Contribution Source")
-            st.plotly_chart(fig_pf, use_container_width=True)
+            fig_pf = px.area(df, x="Month", y=["PF Employee Bal", "PF Company Bal"], color_discrete_sequence=[COLOR_PRIMARY, COLOR_SECONDARY])
+            fig_pf.update_layout(yaxis_title="Total Balance (PKR)", legend_title="", margin=dict(t=20))
+            st.plotly_chart(style_plotly_fig(fig_pf), use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
         with tab4:
             st.subheader("Raw Extracted Data")
