@@ -29,7 +29,7 @@ def check_password():
     else:
         return True
 
-@st.cache_resource
+# REMOVED CACHE HERE TO PREVENT BROKEN PIPE ERRORS
 def authenticate_gmail():
     creds = Credentials(
         token=None,
@@ -40,7 +40,8 @@ def authenticate_gmail():
     )
     return build('gmail', 'v1', credentials=creds)
 
-@st.cache_data
+# ADDED 1-HOUR TIME LIMIT (TTL) TO KEEP DATA FRESH
+@st.cache_data(ttl=3600)
 def fetch_salary_data():
     service = authenticate_gmail()
     query = 'label:agl-pay-slips OR from:payroll@pafl.com.pk'
@@ -236,3 +237,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
