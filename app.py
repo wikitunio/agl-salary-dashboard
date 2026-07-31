@@ -203,9 +203,13 @@ def main():
                 prev_val = prev_month_data[metric]
                 curr_val = month_data[metric]
                 diff = curr_val - prev_val
-                # Explicitly add the exact sign and 'Rs.' string
                 sign = "+" if diff >= 0 else "-"
-                return f"{sign} Rs. {abs(diff):,.0f} MoM"
+                
+                # Check metric name to apply correct unit
+                if metric == "Leave Balance":
+                    return f"{sign} {abs(diff):,.0f} Days MoM"
+                else:
+                    return f"{sign} Rs. {abs(diff):,.0f} MoM"
             return None
 
         # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
@@ -229,7 +233,6 @@ def main():
         earn3.metric("Hard Area", f"Rs. {month_data['Hard Area']:,.0f}", delta=get_yoy_delta("Hard Area"))
         earn4.metric("House Rent", f"Rs. {month_data['House Rent Allowance']:,.0f}", delta=get_yoy_delta("House Rent Allowance"))
         
-        # 4 columns for perfect symmetry, 4th remains empty
         earn5, earn6, earn7, earn8 = st.columns(4)
         earn5.metric("Other Earnings", f"Rs. {month_data['Other Earnings']:,.0f}", delta=get_yoy_delta("Other Earnings"))
         earn6.metric("Salary Arrears", f"Rs. {month_data['Salary Arrears']:,.0f}", delta=get_yoy_delta("Salary Arrears"))
