@@ -50,7 +50,6 @@ def fetch_salary_data():
     salary_records = []
 
     def extract_amount(label, text):
-        # Updated Regex to capture decimals (for Annual Leave) as floats
         pattern = rf"{label}\D*?([\d,\.]+)"
         match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
         if match:
@@ -112,6 +111,8 @@ def fetch_salary_data():
         df = df.dropna(subset=['Date'])
         df = df.sort_values('Date').reset_index(drop=True)
         df['Year'] = df['Date'].dt.year
+        # Extract just the 3-letter month name and make it uppercase (e.g., 'JUL')
+        df['Month_Name'] = df['Date'].dt.strftime('%b').str.upper()
     
     return df
 
@@ -129,14 +130,22 @@ def main():
 
         # --- SIDEBAR FILTERS ---
         st.sidebar.title("Controls")
+        
+        # 1. Year Filter
         years = sorted(df['Year'].unique(), reverse=True)
         selected_years = st.sidebar.multiselect("Filter by Year", options=years, default=years)
         
-        # Apply filter
-        df_filtered = df[df['Year'].isin(selected_years)]
+        # 2. Month Filter (Sorted chronologically instead of alphabetically)
+        month_order = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+        available_months = df['Month_Name'].unique().tolist()
+        sorted_months = sorted(available_months, key=lambda x: month_order.index(x) if x in month_order else 12)
+        selected_months = st.sidebar.multiselect("Filter by Month", options=sorted_months, default=sorted_months)
+        
+        # Apply both filters to the dataframe
+        df_filtered = df[(df['Year'].isin(selected_years)) & (df['Month_Name'].isin(selected_months))]
         
         if df_filtered.empty:
-            st.warning("No data for the selected year(s).")
+            st.warning("No data matches the selected filters.")
             return
 
         latest_record = df_filtered.iloc[-1]
@@ -159,7 +168,6 @@ def main():
             "🗄️ Raw Data & Export"
         ])
 
-        # TAB 1: Core Salary Breakdown
         with tab1:
             col_chart1, col_chart2 = st.columns([2, 1])
             
@@ -179,7 +187,6 @@ def main():
                 fig_pie.update_layout(showlegend=False)
                 st.plotly_chart(fig_pie, use_container_width=True)
 
-        # TAB 2: Cost of Living at Site
         with tab2:
             st.subheader("Site Expenses vs. Hard Area Allowance")
             st.markdown("Comparing your monthly Mess & Club bills against your site allowance.")
@@ -189,13 +196,11 @@ def main():
             fig_living.update_layout(yaxis_title="Rupees (PKR)", legend_title="Category")
             st.plotly_chart(fig_living, use_container_width=True)
 
-        # TAB 3: Long Term Wealth & Forecasting
         with tab3:
             col_pf, col_forecast = st.columns([2, 1])
             
             with col_pf:
                 st.subheader("Provident Fund Growth")
-                # Area chart for cumulative wealth
                 fig_pf = px.area(df_filtered, x="Month", y=["PF Employee Bal", "PF Company Bal"], 
                                  template="plotly_white", color_discrete_sequence=['#1f77b4', '#aec7e8'])
                 fig_pf.update_layout(yaxis_title="Total Balance (PKR)", legend_title="Contribution Source")
@@ -207,16 +212,19 @@ def main():
                 st.info(f"**Projected Net Take-Home:** Rs. {latest_record['Net Pay'] * 12:,.0f}")
                 st.warning(f"**Projected Tax Burden:** Rs. {latest_record['Income Tax'] * 12:,.0f}")
                 
-                savings_rate = (latest_record['PF Deduction'] / latest_record['Gross Pay']) * 100
-                st.success(f"**Current PF Savings Rate:** {savings_rate:.1f}% of Gross Pay")
+                # Check for zero Gross Pay to avoid division by zero errors
+                if latest_record['Gross Pay'] > 0:
+                    savings_rate = (latest_record['PF Deduction'] / latest_record['Gross Pay']) * 100
+                    st.success(f"**Current PF Savings Rate:** {savings_rate:.1f}% of Gross Pay")
+                else:
+                    st.success("**Current PF Savings Rate:** N/A")
 
-        # TAB 4: Data & Export
         with tab4:
             st.subheader("Raw Extracted Data")
-            display_df = df_filtered.drop(columns=['Date', 'Year'])
+            # Drop the extra helper columns before displaying the table
+            display_df = df_filtered.drop(columns=['Date', 'Year', 'Month_Name'])
             st.dataframe(display_df, use_container_width=True)
             
-            # Export to CSV button
             csv = display_df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Data as CSV",
@@ -227,4 +235,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
