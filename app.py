@@ -1,13 +1,28 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import base64
 import re
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-# --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="AGL Salary Portal", page_icon="📈", layout="wide")
+# --- PAGE CONFIGURATION & UI STYLING ---
+st.set_page_config(page_title="AGL Salary Portal", page_icon="🏭", layout="wide")
+
+# Inject Custom CSS for graceful metric cards
+st.markdown("""
+<style>
+div[data-testid="metric-container"] {
+    background-color: #ffffff;
+    border: 1px solid #e0e4eb;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+    border-left: 5px solid #2ca02c;
+}
+</style>
+""", unsafe_allow_html=True)
 
 def check_password():
     def password_entered():
@@ -29,7 +44,6 @@ def check_password():
     else:
         return True
 
-# REMOVED CACHE HERE TO PREVENT BROKEN PIPE ERRORS
 def authenticate_gmail():
     creds = Credentials(
         token=None,
@@ -40,7 +54,6 @@ def authenticate_gmail():
     )
     return build('gmail', 'v1', credentials=creds)
 
-# ADDED 1-HOUR TIME LIMIT (TTL) TO KEEP DATA FRESH
 @st.cache_data(ttl=3600)
 def fetch_salary_data():
     service = authenticate_gmail()
@@ -112,8 +125,8 @@ def fetch_salary_data():
         df = df.dropna(subset=['Date'])
         df = df.sort_values('Date').reset_index(drop=True)
         df['Month_Name'] = df['Date'].dt.strftime('%b').str.upper()
+        df['Year'] = df['Date'].dt.year
         
-        # Financial Year Logic (July to June)
         def get_fy(date):
             if date.month >= 7:
                 return f"FY {date.year}-{str(date.year + 1)[-2:]}"
@@ -126,38 +139,47 @@ def fetch_salary_data():
 
 def main():
     if check_password():
-        st.title("📈 AGL Salary & Compensation Portal")
+        # --- BRANDING & HEADER ---
+        st.markdown("<h1>🏭 AgriTech Ltd <span style='font-size:24px; color:gray;'>| Executive Compensation Portal</span></h1>", unsafe_allow_html=True)
         
-        with st.spinner("Securely synchronizing with Gmail..."):
+        with st.spinner("Synchronizing securely with Gmail..."):
             df = fetch_salary_data()
 
         if df.empty:
             st.warning("No valid pay slip data could be parsed. Check email formatting.")
             return
+            
+        # Success Toast Notification
+        st.toast("✅ Secure connection established! Data synced.", icon="🚀")
 
         # --- SIDEBAR CONTROLS ---
-        st.sidebar.title("📅 Timeline Controls")
+        st.sidebar.markdown("### ⚙️ Financial Engine")
         st.sidebar.markdown("Isolate a specific tax cycle.")
         
-        # 1. FY Dropdown
         available_fys = sorted(df['FY'].unique(), reverse=True)
         selected_fy = st.sidebar.selectbox("1. Select Financial Year", options=available_fys)
         
         df_fy = df[df['FY'] == selected_fy]
         
-        # 2. Month Dropdown (Sorted July -> June)
         available_months = df_fy['Month_Name'].unique().tolist()
         fy_month_order = ['JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN']
         sorted_months = sorted(available_months, key=lambda x: fy_month_order.index(x) if x in fy_month_order else 12)
         
         selected_month = st.sidebar.selectbox("2. Select Focus Month", options=sorted_months, index=len(sorted_months)-1)
         
-        # Get exact data for the chosen month
         month_data = df_fy[df_fy['Month_Name'] == selected_month].iloc[0]
+
+        # --- YoY INCREMENT DETECTOR ---
+        prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
+        if not prev_year_month.empty:
+            prev_basic = prev_year_month.iloc[0]['Basic Pay']
+            delta_basic = month_data['Basic Pay'] - prev_basic
+            delta_pct = f"{(delta_basic / prev_basic) * 100:.1f}% YoY" if prev_basic > 0 else None
+        else:
+            delta_pct = None
 
         # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
         st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
-        st.markdown("Cumulative totals calculated from July 1st of the selected tax year.")
         
         col_fy1, col_fy2, col_fy3, col_fy4 = st.columns(4)
         col_fy1.metric("Gross Pay (FY)", f"Rs. {df_fy['Gross Pay'].sum():,.0f}")
@@ -171,62 +193,103 @@ def main():
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Monthly Net Pay", f"Rs. {month_data['Net Pay']:,.0f}")
-        col_m2.metric("Monthly Income Tax", f"Rs. {month_data['Income Tax']:,.0f}")
-        col_m3.metric("Hard Area Allowance", f"Rs. {month_data['Hard Area']:,.0f}")
+        col_m1.metric("Basic Pay", f"Rs. {month_data['Basic Pay']:,.0f}", delta=delta_pct)
+        col_m2.metric("Monthly Net Pay", f"Rs. {month_data['Net Pay']:,.0f}")
+        col_m3.metric("Monthly Income Tax", f"Rs. {month_data['Income Tax']:,.0f}")
         col_m4.metric("Leave Balance", f"{month_data['Leave Balance']} Days")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- SECTION 3: TABS & CHARTS ---
         tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 FY Pay Trends", 
-            "💸 FY Deduction Breakdown", 
-            "🏠 Site Living Expenses", 
-            "🚀 All-Time Wealth Growth"
+            "📊 Pay & Tax Trends", 
+            "🏠 Site Housing & Living", 
+            "🎓 Master's Fund Tracker",
+            "🗄️ Raw Data Export"
         ])
 
         with tab1:
-            st.subheader(f"Earnings Curve ({selected_fy})")
-            fig_net = px.line(df_fy, x="Month", y=["Gross Pay", "Net Pay"], markers=True, template="plotly_white")
-            fig_net.update_layout(yaxis_title="Rupees (PKR)", legend_title="")
-            st.plotly_chart(fig_net, use_container_width=True)
+            col_chart1, col_chart2 = st.columns([2, 1])
+            with col_chart1:
+                st.subheader(f"Earnings Curve ({selected_fy})")
+                fig_net = px.line(df_fy, x="Month", y=["Gross Pay", "Net Pay"], markers=True, template="plotly_white")
+                fig_net.update_layout(yaxis_title="Rupees (PKR)", legend_title="", margin=dict(l=0, r=0, t=30, b=0))
+                st.plotly_chart(fig_net, use_container_width=True)
+            with col_chart2:
+                st.subheader("Deduction Slice")
+                deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
+                fy_deduction_values = [month_data[label] for label in deduction_labels]
+                
+                fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.5, template="plotly_white")
+                fig_pie.update_traces(textposition='inside', textinfo='percent')
+                fig_pie.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5))
+                st.plotly_chart(fig_pie, use_container_width=True)
 
         with tab2:
-            col_pie1, col_pie2 = st.columns([1, 1])
-            with col_pie1:
-                st.subheader(f"Total Deductions ({selected_fy})")
-                deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
-                # Sums up the deductions for the entire FY
-                fy_deduction_values = [df_fy[label].sum() for label in deduction_labels]
+            col_house1, col_house2 = st.columns(2)
+            with col_house1:
+                st.subheader("Married Quarter Housing Monitor")
+                st.markdown("Tracking the spread between your rent allowance and your payroll deductions.")
+                housing_spread = month_data['House Rent Allowance'] - month_data['House Rent Deduction']
+                st.metric("Net Housing Benefit", f"Rs. {housing_spread:,.0f}", 
+                          help="House Rent Allowance minus House Rent Deduction")
                 
-                fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.4, template="plotly_white")
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                fig_pie.update_layout(showlegend=False)
-                st.plotly_chart(fig_pie, use_container_width=True)
-            with col_pie2:
-                st.subheader("Raw Deduction Data")
-                st.dataframe(df_fy[['Month'] + deduction_labels], use_container_width=True, hide_index=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                st.subheader(f"Site Expenses ({selected_fy})")
+                fig_living = px.bar(df_fy, x="Month", y=["Mess Bill", "Club Bill"], template="plotly_white", barmode="stack")
+                fig_living.add_scatter(x=df_fy["Month"], y=df_fy["Hard Area"], mode='lines+markers', name='Hard Area Allowance', line=dict(color='green', width=3))
+                fig_living.update_layout(yaxis_title="Rupees (PKR)", legend_title="", margin=dict(l=0, r=0, t=0, b=0))
+                st.plotly_chart(fig_living, use_container_width=True)
+                
+            with col_house2:
+                st.subheader("Expense-to-Income Ratio")
+                total_site_expense = month_data['Mess Bill'] + month_data['Club Bill']
+                hard_area_allowance = month_data['Hard Area']
+                ratio = (total_site_expense / hard_area_allowance) * 100 if hard_area_allowance > 0 else 0
+                
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = ratio,
+                    number = {'suffix': "%"},
+                    title = {'text': "Site Expenses vs. Hard Area Allowance"},
+                    gauge = {
+                        'axis': {'range': [None, 100], 'tickwidth': 1},
+                        'bar': {'color': "rgba(0,0,0,0)"},
+                        'bgcolor': "white",
+                        'borderwidth': 2,
+                        'bordercolor': "gray",
+                        'steps': [
+                            {'range': [0, 50], 'color': "rgba(44, 160, 44, 0.6)"}, # Green
+                            {'range': [50, 80], 'color': "rgba(255, 165, 0, 0.6)"}, # Orange
+                            {'range': [80, 100], 'color': "rgba(214, 39, 40, 0.6)"}], # Red
+                        'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': ratio}
+                    }
+                ))
+                fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True)
 
         with tab3:
-            st.subheader(f"Site Expenses vs Allowances ({selected_fy})")
-            fig_living = px.bar(df_fy, x="Month", y=["Mess Bill", "Club Bill"], title="Monthly Site Deductions", template="plotly_white", barmode="stack")
-            fig_living.add_scatter(x=df_fy["Month"], y=df_fy["Hard Area"], mode='lines+markers', name='Hard Area Allowance', line=dict(color='green', width=3))
-            fig_living.update_layout(yaxis_title="Rupees (PKR)")
-            st.plotly_chart(fig_living, use_container_width=True)
-
-        with tab4:
-            st.subheader("Provident Fund Accumulation (All-Time)")
-            st.markdown("Unlike the other tabs, this chart ignores the FY filter to show the entire lifespan of your PF growth.")
-            # Uses the unfiltered 'df' to show all-time history
+            st.subheader("🎓 Master's Degree Fund (PF Accumulation)")
+            st.markdown("Tracking your total all-time Provident Fund wealth against an academic savings milestone.")
+            
+            # Master's Degree Milestone Target
+            MASTERS_TARGET = 3000000  # 3 Million PKR Target (Adjustable)
+            current_total_pf = month_data['PF Employee Bal'] + month_data['PF Company Bal']
+            progress_pct = min((current_total_pf / MASTERS_TARGET), 1.0)
+            
+            st.progress(progress_pct)
+            st.caption(f"**Current Milestone Progress:** {progress_pct*100:.1f}% towards Rs. {MASTERS_TARGET:,.0f} goal.")
+            
             fig_pf = px.area(df, x="Month", y=["PF Employee Bal", "PF Company Bal"], template="plotly_white", color_discrete_sequence=['#1f77b4', '#aec7e8'])
             fig_pf.update_layout(yaxis_title="Total Balance (PKR)", legend_title="Contribution Source")
             st.plotly_chart(fig_pf, use_container_width=True)
-            
-            st.divider()
-            
-            # Export Option
+
+        with tab4:
+            st.subheader("Raw Extracted Data")
             display_df = df.drop(columns=['Date', 'Month_Name'])
+            st.dataframe(display_df, use_container_width=True)
+            
             csv = display_df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Complete History as CSV",
@@ -237,4 +300,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
