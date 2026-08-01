@@ -354,16 +354,21 @@ def main():
             
             if st.button("🔮 Generate Pakistan Market Allocation"):
                 with st.spinner("Analyzing Pakistan inflation, interest rates, and PSX trends..."):
-                    try:
-                        client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                        
-                        # --- Smart Model Selector ---
-                        active_models = [m.id for m in client.models.list().data]
-                        preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                        chosen_model = next((model for model in preferred_models if model in active_models), None)
-                        if not chosen_model:
-                            valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                            chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                    import google.genai as genai
+
+# Setup client
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+
+# Enable live Google Search grounding
+response = client.models.generate_content(
+    model='gemini-2.0-flash',
+    contents=prompt,
+    config={
+        'tools': [{'google_search': {}}]  # <-- THIS ENABLES LIVE WEB SEARCH
+    }
+)
+
+st.markdown(response.text)
                         
                         # Fetch the live date so the AI knows the exact current economic timeline
                         import datetime
