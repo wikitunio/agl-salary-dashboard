@@ -650,26 +650,38 @@ def main():
                             # Automatically grabs the key from Streamlit Secrets
                             client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
                             
-                            # --- AUTO-SELECT MODEL LOGIC ---
-                            # Ask Groq for a list of all currently active models
-                            active_models = client.models.list().data
+                            # --- SMART AUTO-SELECT MODEL LOGIC ---
+                            active_models = [m.id for m in client.models.list().data]
                             
-                            # Create a simple list of the model IDs
-                            model_names = [m.id for m in active_models]
+                            # A ranked list of the best conversational models (Top = Most Preferred)
+                            preferred_models = [
+                                "llama-3.3-70b-versatile",
+                                "llama-3.1-70b-versatile",
+                                "llama-3.1-8b-instant",
+                                "llama3-70b-8192",
+                                "mixtral-8x7b-32768"
+                            ]
                             
-                            # Smart fallback: Try to find a 'llama' model first. 
-                            # If none exist, just pick the very first model Groq says is active.
-                            chosen_model = next((name for name in model_names if "llama" in name.lower()), model_names[0])
-                            # -------------------------------
+                            # Find the first model on our preferred list that is currently online
+                            chosen_model = next((model for model in preferred_models if model in active_models), None)
+                            
+                            # Extreme fallback: Just pick any model that isn't a "guard" or "vision" model
+                            if not chosen_model:
+                                valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
+                                chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                            # -------------------------------------
                             
                             completion = client.chat.completions.create(
-                                model=chosen_model, # <--- Uses the dynamically selected model
+                                model=chosen_model, 
                                 messages=messages_for_api,
                                 temperature=0.5,
                                 max_tokens=500
                             )
                             
                             response = completion.choices[0].message.content
+                            
+                            # Display a tiny caption so you know exactly which model answered
+                            st.caption(f"*(Powered by {chosen_model})*")
                             st.markdown(response)
                             
                             # Save AI's response to history
