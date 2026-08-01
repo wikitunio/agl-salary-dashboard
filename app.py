@@ -337,14 +337,26 @@ def main():
                         return f"{sign} Rs. {abs(diff):,.0f} MoM"
                     return None
                     
-                categories = category_sums.index.tolist()
-                for i in range(0, len(categories), 4):
-                    cols = st.columns(4)
-                    for j in range(4):
-                        if i + j < len(categories):
-                            cat = categories[i+j]
-                            val = category_sums[cat]
-                            cols[j].metric(cat, f"Rs. {val:,.0f}", delta=get_cat_mom_delta(cat, val), delta_color="inverse")
+                # --- NEW LAYOUT: PIE CHART + METRICS GRID ---
+                pie_col, met_col = st.columns([1, 1.5])
+                
+                with pie_col:
+                    fig_main_pie = px.pie(curr_exp, values='Amount (PKR)', names='Category', hole=0.4, template="plotly_white")
+                    fig_main_pie.update_traces(textposition='inside', textinfo='percent+label')
+                    fig_main_pie.update_layout(showlegend=False, margin=dict(t=10, b=10, l=0, r=0))
+                    st.plotly_chart(fig_main_pie, use_container_width=True)
+                
+                with met_col:
+                    categories = category_sums.index.tolist()
+                    for i in range(0, len(categories), 2):
+                        cols = st.columns(2)
+                        for j in range(2):
+                            if i + j < len(categories):
+                                cat = categories[i+j]
+                                val = category_sums[cat]
+                                cols[j].metric(cat, f"Rs. {val:,.0f}", delta=get_cat_mom_delta(cat, val), delta_color="inverse")
+                # --------------------------------------------
+
             else:
                 st.info(f"No manual expenses logged yet for {month_data['Month']}.")
                 
@@ -494,17 +506,7 @@ def main():
             else:
                 curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
                 if not curr_exp.empty:
-                    col_ex1, col_ex2 = st.columns([1, 1])
-                    with col_ex1:
-                        st.markdown(f"#### Expense Breakdown ({month_data['Month']})")
-                        fig_exp = px.pie(curr_exp, values='Amount (PKR)', names='Category', hole=0.4, template="plotly_white")
-                        fig_exp.update_traces(textposition='inside', textinfo='percent+label')
-                        fig_exp.update_layout(showlegend=False)
-                        st.plotly_chart(fig_exp, use_container_width=True)
-                    
-                    with col_ex2:
-                        st.markdown("#### Detail Log")
-                        st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
+                    st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
                 else:
                     st.info("No detailed breakdown available for this month.")
 
