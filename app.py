@@ -255,7 +255,54 @@ def main():
                 
         elif exp_error:
             st.error(f"⚠️ {exp_error}")
+# --- SECTION 2C: SMART FINANCIAL INSIGHTS ---
+        st.markdown("### 🤖 Smart Financial Insights")
+        
+        insights = []
+        
+        if prev_month_data is not None:
+            # 1. Income Detection
+            gross_diff = month_data['Gross Pay'] - prev_month_data['Gross Pay']
+            if gross_diff > 0:
+                insights.append(f"🟢 **Income Growth:** Gross Pay increased by **Rs. {gross_diff:,.0f}** MoM. (Check for arrears or increased allowances).")
+            elif gross_diff < 0:
+                insights.append(f"🔴 **Income Drop:** Gross Pay decreased by **Rs. {abs(gross_diff):,.0f}**. (Verify if last month had one-time bonuses).")
+                
+            # 2. Tax Detection
+            tax_diff = month_data['Income Tax'] - prev_month_data['Income Tax']
+            if tax_diff > 0:
+                insights.append(f"⚠️ **Tax Alert:** Income tax deduction rose by **Rs. {tax_diff:,.0f}** this month.")
+            elif tax_diff < 0:
+                insights.append(f"✅ **Tax Savings:** Income tax deduction dropped by **Rs. {abs(tax_diff):,.0f}**.")
+                
+            # 3. Expense & Budget Detection
+            if 'df_exp' in locals() and not df_exp.empty and not prev_exp.empty and not curr_exp.empty:
+                exp_diff = total_spent - prev_exp['Amount (PKR)'].sum()
+                if exp_diff > 0:
+                    insights.append(f"📉 **Spending Alert:** Out-of-pocket expenses increased by **Rs. {exp_diff:,.0f}** compared to last month.")
+                elif exp_diff < 0:
+                    insights.append(f"📈 **Excellent Budgeting:** You reduced your manual expenses by **Rs. {abs(exp_diff):,.0f}**!")
+                    
+            # 4. Savings Master Check
+            if 'savings_rate' in locals():
+                if savings_rate >= 30:
+                    insights.append("⭐ **Savings Master:** You saved over 30% of your take-home pay, hitting the gold standard for financial growth.")
+                elif savings_rate < 10:
+                    insights.append("🔔 **Budget Warning:** Your savings rate dropped below 10%. Consider reviewing your top expense categories.")
+                    
+            # 5. Anomaly Detection
+            unmapped = month_data['Total Deductions'] - (month_data['Income Tax'] + month_data['PF Deduction'] + month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction'] + month_data['EOBI'])
+            if unmapped > 100:
+                insights.append(f"❓ **Anomaly Detected:** Found **Rs. {unmapped:,.0f}** in unmapped, hidden deductions. Please review your official PDF payslip.")
+                
+        else:
+            insights.append("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
 
+        # Render the insights inside a clean expander box
+        with st.expander("Click to view Auto-Generated Insights", expanded=True):
+            for insight in insights:
+                st.markdown(insight)
+                
         st.markdown("<br>", unsafe_allow_html=True)
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
