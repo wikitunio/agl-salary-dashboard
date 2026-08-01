@@ -364,55 +364,75 @@ def main():
             st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
             st.caption("Let AI generate a dynamic investment portfolio based on current macroeconomic conditions in Pakistan.")
             
-            if st.button("🔮 Generate Pakistan Market Allocation"):
-                with st.spinner("Analyzing Pakistan inflation, interest rates, and PSX trends..."):
-                    try:
-                        client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                        
-                        # Smart Model Selector
-                        active_models = [m.id for m in client.models.list().data]
-                        preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                        chosen_model = next((model for model in preferred_models if model in active_models), active_models[0])
-                        
-                        prompt = f"""
-                        Act as an elite Wealth Manager based in Pakistan.
-                        Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
-                        
-                        Consider the current macroeconomic climate of Pakistan (high interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields).
-                        
-                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
-                        
-                        Output EXACTLY in this Markdown format:
-                        
-                        ### 📊 Recommended Pakistan Portfolio
-                        | Asset Class | Allocation % | Amount (PKR) | Rationale (Pak Market Context) |
-                        |---|---|---|---|
-                        | Emergency Fund / Cash | X% | Rs. Y | ... |
-                        | PSX Stocks / ETFs | X% | Rs. Y | ... |
-                        | Islamic/Income Mutual Funds | X% | Rs. Y | ... |
-                        | High-Yield Savings / Gold | X% | Rs. Y | ... |
-                        
-                        *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
-                        
-                        ### 📰 Market Outlook Rationale
-                        Provide 3 punchy bullet points on why this specific allocation makes sense given the current inflation, state bank policy rates, and economic climate in Pakistan right now.
-                        """
-                        
-                        completion = client.chat.completions.create(
-                            model=chosen_model,
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=0.4,
-                            max_tokens=600
-                        )
-                        
-                        st.markdown(completion.choices[0].message.content)
-                        st.caption(f"⚡ *Powered by {chosen_model} via Groq LPU*")
-                        
-                    except Exception as e:
-                        st.error(f"AI Connection Error: {str(e)}")
-        elif 'remaining_cash' in locals():
-            st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")
-        
+            if st.button(f"✨ Generate AI Insights for {month_data['Month']}"):
+                        with st.spinner(f"AI is analyzing {month_data['Month']} vs {prev_month_data['Month']}..."):
+                            try:
+                                client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+                                
+                                # --- Smart Model Selector ---
+                                active_models = [m.id for m in client.models.list().data]
+                                preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
+                                chosen_model = next((model for model in preferred_models if model in active_models), None)
+                                if not chosen_model:
+                                    valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
+                                    chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                                    
+                                # --- PRE-FORMAT VARIABLES TO AVOID PYTHON F-STRING PARSER ERRORS ---
+                                cur_gross = f"Rs. {month_data['Gross Pay']:,.0f}"
+                                cur_net = f"Rs. {month_data['Net Pay']:,.0f}"
+                                cur_tax = f"Rs. {month_data['Income Tax']:,.0f}"
+                                cur_site = f"Rs. {month_data['Mess Bill'] + month_data['Club Bill']:,.0f}"
+                                
+                                expense_context_curr_val = total_spent if 'total_spent' in locals() else 0
+                                cur_exp = f"Rs. {expense_context_curr_val:,.0f}"
+                                
+                                prev_gross = f"Rs. {prev_month_data['Gross Pay']:,.0f}"
+                                prev_net = f"Rs. {prev_month_data['Net Pay']:,.0f}"
+                                prev_tax = f"Rs. {prev_month_data['Income Tax']:,.0f}"
+                                prev_site = f"Rs. {prev_month_data['Mess Bill'] + prev_month_data['Club Bill']:,.0f}"
+                                
+                                expense_context_prev_val = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
+                                prev_exp_str = f"Rs. {expense_context_prev_val:,.0f}"
+                                
+                                prompt = f"""
+                                Act as a corporate financial advisor for an Executive Chemical Engineer at AgriTech Ltd. 
+                                Analyze the Month-over-Month changes between {selected_month} and {prev_month_data['Month']}:
+                                
+                                [CURRENT MONTH: {selected_month}]
+                                - Gross Pay: {cur_gross}
+                                - Net Pay (Take Home): {cur_net}
+                                - Income Tax: {cur_tax}
+                                - Site Living (Mess+Club): {cur_site}
+                                - Out of Pocket Expenses: {cur_exp}
+                                
+                                [PREVIOUS MONTH: {prev_month_data['Month']}]
+                                - Gross Pay: {prev_gross}
+                                - Net Pay (Take Home): {prev_net}
+                                - Income Tax: {prev_tax}
+                                - Site Living (Mess+Club): {prev_site}
+                                - Out of Pocket Expenses: {prev_exp_str}
+                                
+                                Write 3 to 4 concise, punchy bullet points using emojis. 
+                                Highlight key changes in income, tax, spending habits, and overall savings efficiency.
+                                Explain what these differences mean practically.
+                                Do NOT write an introduction or conclusion. Output ONLY the bullet points.
+                                """
+                                
+                                completion = client.chat.completions.create(
+                                    model=chosen_model,
+                                    messages=[{"role": "user", "content": prompt}],
+                                    temperature=0.3,
+                                    max_tokens=400
+                                )
+                                
+                                result = completion.choices[0].message.content
+                                result += f"\n\n*(Powered by {chosen_model})*"
+                                
+                                st.session_state["ai_insights_cache"][cache_key] = result
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"Groq API Error: {str(e)}")        
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Pay & Tax Trends", 
