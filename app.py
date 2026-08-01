@@ -240,9 +240,9 @@ def main():
         ])
 
         with tab1:
-            st.subheader("💧 Salary Waterfall Breakdown")
+            st.subheader("💧 Salary & Expense Waterfall")
             
-            # Prepare Waterfall Data based on the selected month
+            # Prepare initial variables
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -252,18 +252,47 @@ def main():
             wf_eobi = month_data['EOBI']
             wf_net = month_data['Net Pay']
             
+            # Safely fetch Pocket Expenses
+            wf_expenses = 0
+            if 'df_exp' in locals() and not df_exp.empty:
+                curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
+                if not curr_exp.empty:
+                    wf_expenses = curr_exp['Amount (PKR)'].sum()
+                    
+            wf_savings = wf_net - wf_expenses
+            
+            # Dynamically build the chart sequence
+            x_list = ["Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "Rent", "EOBI"]
+            y_list = [wf_gross, -wf_tax, -wf_pf, -wf_mess, -wf_club, -wf_rent, -wf_eobi]
+            text_list = [f"{wf_gross:,.0f}", f"-{wf_tax:,.0f}", f"-{wf_pf:,.0f}", f"-{wf_mess:,.0f}", f"-{wf_club:,.0f}", f"-{wf_rent:,.0f}", f"-{wf_eobi:,.0f}"]
+            measure_list = ["relative"] * 7
+            
+            # Catch unmapped payslip deductions automatically
+            unmapped = month_data['Total Deductions'] - (wf_tax + wf_pf + wf_mess + wf_club + wf_rent + wf_eobi)
+            if unmapped > 5:
+                x_list.append("Other Deductions")
+                y_list.append(-unmapped)
+                text_list.append(f"-{unmapped:,.0f}")
+                measure_list.append("relative")
+                
+            # Add the Net Pay checkpoint, the Expenses step, and the Final Cash total
+            x_list.extend(["Net Pay", "Pocket Expenses", "Remaining Cash"])
+            y_list.extend([wf_net, -wf_expenses, wf_savings])
+            text_list.extend([f"{wf_net:,.0f}", f"-{wf_expenses:,.0f}", f"{wf_savings:,.0f}"])
+            measure_list.extend(["total", "relative", "total"])
+            
             # Build the Plotly Waterfall Chart
             fig_waterfall = go.Figure(go.Waterfall(
-                name="Salary", orientation="v",
-                measure=["relative", "relative", "relative", "relative", "relative", "relative", "relative", "total"],
-                x=["Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "Rent Deduction", "EOBI", "Net Pay"],
+                name="Salary Flow", orientation="v",
+                measure=measure_list,
+                x=x_list,
+                y=y_list,
                 textposition="outside",
-                text=[f"{wf_gross:,.0f}", f"-{wf_tax:,.0f}", f"-{wf_pf:,.0f}", f"-{wf_mess:,.0f}", f"-{wf_club:,.0f}", f"-{wf_rent:,.0f}", f"-{wf_eobi:,.0f}", f"{wf_net:,.0f}"],
-                y=[wf_gross, -wf_tax, -wf_pf, -wf_mess, -wf_club, -wf_rent, -wf_eobi, wf_net],
+                text=text_list,
                 connector={"line": {"color": "gray", "width": 1.5}},
-                decreasing={"marker": {"color": "#ff4b4b"}},   # Streamlit Red for deductions
+                decreasing={"marker": {"color": "#ff4b4b"}},   # Streamlit Red for all deductions/expenses
                 increasing={"marker": {"color": "#2ca02c"}},   # Green for starting Gross Pay
-                totals={"marker": {"color": "#1f77b4"}}        # Blue for final Take-Home
+                totals={"marker": {"color": "#1f77b4"}}        # Blue for Net Pay and Final Cash
             ))
             
             fig_waterfall.update_layout(
@@ -271,7 +300,7 @@ def main():
                 margin=dict(t=30, b=20, l=0, r=0),
                 yaxis_title="Rupees (PKR)",
                 showlegend=False,
-                height=450
+                height=500
             )
             st.plotly_chart(fig_waterfall, use_container_width=True)
             
