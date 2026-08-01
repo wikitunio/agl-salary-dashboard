@@ -134,12 +134,10 @@ def fetch_salary_data():
     if not df.empty:
         df['Date'] = pd.to_datetime(df['Month'], format='%b-%Y', errors='coerce')
         df = df.dropna(subset=['Date'])
-        # Sort chronologically so manual injection drops into the exact right place
         df = df.sort_values('Date').reset_index(drop=True)
         df['Month_Name'] = df['Date'].dt.strftime('%b').str.upper()
         df['Year'] = df['Date'].dt.year
         
-        # Automatically calculate any unmapped allowances to avoid math errors
         df['Other Allowances'] = df['Gross Pay'] - (df['Basic Pay'] + df['Hard Area'] + df['House Rent Allowance'] + df['Other Earnings'] + df['Salary Arrears'])
         df['Other Allowances'] = df['Other Allowances'].apply(lambda x: max(0, x))
         
@@ -152,6 +150,23 @@ def fetch_salary_data():
         df['FY'] = df['Date'].apply(get_fy)
     
     return df
+
+@st.cache_data(ttl=600)
+def fetch_expense_data():
+    sharepoint_url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQBicSNMjahzTYvn03-bpK36AVWD3NXpwKCBih5ZlUJxSiE?download=1"
+    try:
+        df_exp = pd.read_excel(sharepoint_url, sheet_name='Form1')
+        expected_columns = ['Date', 'Salary Month', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']
+        
+        available_columns = [col for col in expected_columns if col in df_exp.columns]
+        df_exp = df_exp[available_columns]
+        
+        if 'Amount (PKR)' in df_exp.columns:
+            df_exp = df_exp.dropna(subset=['Amount (PKR)'])
+            
+        return df_exp
+    except Exception as e:
+        return pd.DataFrame() 
 
 def main():
     if check_password():
@@ -184,7 +199,6 @@ def main():
         
         # --- DELTA ENGINE (YoY & MoM) ---
         prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
-        
         current_index = df[df['Date'] == month_data['Date']].index[0]
         prev_month_data = df.iloc[current_index - 1] if current_index > 0 else None
 
@@ -205,7 +219,6 @@ def main():
                 diff = curr_val - prev_val
                 sign = "+" if diff >= 0 else "-"
                 
-                # Check metric name to apply correct unit
                 if metric == "Leave Balance":
                     return f"{sign} {abs(diff):,.0f} Days MoM"
                 else:
@@ -214,18 +227,15 @@ def main():
 
         # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
         st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
-        
         col_fy1, col_fy2, col_fy3, col_fy4 = st.columns(4)
         col_fy1.metric("Gross Pay (FY)", f"Rs. {df_fy['Gross Pay'].sum():,.0f}")
         col_fy2.metric("Total Tax Deducted", f"Rs. {df_fy['Income Tax'].sum():,.0f}")
         col_fy3.metric("Net Pay Transferred", f"Rs. {df_fy['Net Pay'].sum():,.0f}")
         col_fy4.metric("PF Saved This Year", f"Rs. {df_fy['PF Deduction'].sum():,.0f}")
-        
         st.divider()
 
-        # --- SECTION 2: FOCUS MONTH (DYNAMIC SNAPSHOT) ---
+        # --- SECTION 2: FOCUS MONTH SNAPSHOT ---
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
-        
         st.markdown("##### 💰 Earnings (Year-over-Year Tracking)")
         earn1, earn2, earn3, earn4 = st.columns(4)
         earn1.metric("Gross Pay", f"Rs. {month_data['Gross Pay']:,.0f}", delta=get_yoy_delta("Gross Pay"))
@@ -251,16 +261,16 @@ def main():
         net1.metric("Total Deductions", f"Rs. {month_data['Total Deductions']:,.0f}", delta=get_mom_delta("Total Deductions"), delta_color="inverse")
         net2.metric("Net Pay (Take Home)", f"Rs. {month_data['Net Pay']:,.0f}", delta=get_mom_delta("Net Pay"))
         net3.metric("Leave Balance", f"{month_data['Leave Balance']} Days", delta=get_mom_delta("Leave Balance"))
-
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- SECTION 3: TABS & CHARTS ---
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        # --- SECTION 3: TABS ---
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
             "⚖️ Compare Months",
-            "🗄️ Raw Data Export"
+            "🗄️ Raw Data Export",
+            "💸 Pocket Expenses"
         ])
 
         with tab1:
@@ -275,15 +285,12 @@ def main():
                 deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
                 fy_deduction_values = [month_data[label] for label in deduction_labels]
                 
-                # --- AUTO-DETECTOR LOGIC ---
                 known_sum = sum(fy_deduction_values)
                 unaccounted_deductions = month_data['Total Deductions'] - known_sum
-                
                 if unaccounted_deductions > 5:
                     deduction_labels.append("⚠️ Unmapped Deductions")
                     fy_deduction_values.append(unaccounted_deductions)
                     st.warning(f"Detected Rs. {unaccounted_deductions:,.0f} in unmapped deductions this month!")
-                # ---------------------------
                 
                 fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.5, template="plotly_white")
                 fig_pie.update_traces(textposition='inside', textinfo='percent')
@@ -294,11 +301,8 @@ def main():
             col_house1, col_house2 = st.columns(2)
             with col_house1:
                 st.subheader("Married Quarter Housing Monitor")
-                st.markdown("Tracking the spread between your rent allowance and your payroll deductions.")
                 housing_spread = month_data['House Rent Allowance'] - month_data['House Rent Deduction']
-                st.metric("Net Housing Benefit", f"Rs. {housing_spread:,.0f}", 
-                          help="House Rent Allowance minus House Rent Deduction")
-                
+                st.metric("Net Housing Benefit", f"Rs. {housing_spread:,.0f}", help="House Rent Allowance minus House Rent Deduction")
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 st.subheader(f"Site Expenses ({selected_fy})")
@@ -336,12 +340,9 @@ def main():
 
         with tab3:
             st.subheader("🎓 Master's Degree Fund (PF Accumulation)")
-            st.markdown("Tracking your total all-time Provident Fund wealth against an academic savings milestone.")
-            
             MASTERS_TARGET = 3000000 
             current_total_pf = month_data['PF Employee Bal'] + month_data['PF Company Bal']
             progress_pct = min((current_total_pf / MASTERS_TARGET), 1.0)
-            
             st.progress(progress_pct)
             st.caption(f"**Current Milestone Progress:** {progress_pct*100:.1f}% towards Rs. {MASTERS_TARGET:,.0f} goal.")
             
@@ -351,10 +352,7 @@ def main():
 
         with tab4:
             st.subheader("⚖️ Month-to-Month Comparison")
-            st.markdown("Select any two months to see exact, itemized changes in your compensation.")
-            
             all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
-            
             col_comp1, col_comp2 = st.columns(2)
             with col_comp1:
                 month_a = st.selectbox("Baseline Month (Month A)", options=all_months_sorted, index=min(1, len(all_months_sorted)-1))
@@ -378,7 +376,7 @@ def main():
                 ec7.metric("Other Allowances", f"Rs. {data_b['Other Allowances']:,.0f}", f"{data_b['Other Allowances'] - data_a['Other Allowances']:,.0f}")
 
                 st.divider()
-                st.markdown("#### 💸 Deductions (Note: Red arrow means your deduction went up)")
+                st.markdown("#### 💸 Deductions")
                 dc1, dc2, dc3, dc4 = st.columns(4)
                 dc1.metric("Income Tax", f"Rs. {data_b['Income Tax']:,.0f}", f"{data_b['Income Tax'] - data_a['Income Tax']:,.0f}", delta_color="inverse")
                 dc2.metric("PF Deduction", f"Rs. {data_b['PF Deduction']:,.0f}", f"{data_b['PF Deduction'] - data_a['PF Deduction']:,.0f}", delta_color="inverse")
@@ -396,14 +394,48 @@ def main():
             st.subheader("Raw Extracted Data")
             display_df = df.drop(columns=['Date', 'Month_Name'])
             st.dataframe(display_df, use_container_width=True)
-            
             csv = display_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Complete History as CSV",
-                data=csv,
-                file_name=f"agl_complete_salary_history.csv",
-                mime="text/csv",
-            )
+            st.download_button(label="📥 Download Complete History as CSV", data=csv, file_name=f"agl_complete_salary_history.csv", mime="text/csv")
+
+        with tab6:
+            st.subheader("💸 Personal Cash Flow Monitor")
+            st.markdown("Tracking your out-of-pocket expenses against your Net Pay.")
+            
+            df_exp = fetch_expense_data()
+            
+            if df_exp.empty:
+                st.warning("⚠️ Expense data not found. Please verify the SharePoint link permissions.")
+            else:
+                df_exp['Salary Month'] = df_exp['Salary Month'].astype(str)
+                month_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
+                
+                total_spent = month_exp['Amount (PKR)'].sum()
+                net_pay = month_data['Net Pay']
+                remaining_cash = net_pay - total_spent
+                savings_rate = (remaining_cash / net_pay) * 100 if net_pay > 0 else 0
+                
+                ec1, ec2, ec3, ec4 = st.columns(4)
+                ec1.metric("Net Pay (Inbound)", f"Rs. {net_pay:,.0f}")
+                ec2.metric("Total Spent", f"Rs. {total_spent:,.0f}")
+                ec3.metric("Remaining Cash", f"Rs. {remaining_cash:,.0f}")
+                ec4.metric("True Savings Rate", f"{savings_rate:.1f}%")
+                
+                st.divider()
+                
+                col_ex1, col_ex2 = st.columns([1, 1])
+                with col_ex1:
+                    st.markdown(f"#### Expense Breakdown ({month_data['Month']})")
+                    if total_spent > 0:
+                        fig_exp = px.pie(month_exp, values='Amount (PKR)', names='Category', hole=0.4, template="plotly_white")
+                        fig_exp.update_traces(textposition='inside', textinfo='percent+label')
+                        fig_exp.update_layout(showlegend=False)
+                        st.plotly_chart(fig_exp, use_container_width=True)
+                    else:
+                        st.info("No expenses recorded for this month yet.")
+                
+                with col_ex2:
+                    st.markdown("#### Expense Log")
+                    st.dataframe(month_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
 
 if __name__ == '__main__':
     main()
