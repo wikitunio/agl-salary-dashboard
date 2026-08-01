@@ -389,7 +389,7 @@ def main():
                         
                         # Call Gemini 2.0 Flash with Google Search enabled
                         response = client.models.generate_content(
-                            model='gemini-1.5-flash',
+                            model='gemini-1.5-flash-latest',
                             contents=prompt,
                             config={'tools': [{'google_search': {}}]}
                         )
