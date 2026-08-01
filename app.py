@@ -387,6 +387,7 @@ def main():
                         """
                         
                         # --- xAI (Grok) Direct API Call ---
+                        # --- xAI (Grok) Agent Tools API (Responses) ---
                         headers = {
                             "Content-Type": "application/json",
                             "Authorization": f"Bearer {st.secrets['XAI_API_KEY']}"
@@ -394,17 +395,29 @@ def main():
                         
                         payload = {
                             "model": "grok-2-latest", 
-                            "messages": [{"role": "user", "content": prompt}],
+                            "input": [{"role": "user", "content": prompt}], # Changed from 'messages' to 'input'
                             "temperature": 0.3,
-                            # --- FIXED: Added the required 'sources' array ---
-                            "tools": [{
-                                "type": "live_search",
-                                "sources": [
-                                    {"type": "web"},
-                                    {"type": "news"}
-                                ]
-                            }] 
+                            "tools": [{"type": "web_search"}] # The new, clean Agent Tools syntax
                         }
+                        
+                        # Pointing to the new Responses endpoint
+                        response = requests.post("https://api.x.ai/v1/responses", headers=headers, json=payload)
+                        
+                        if response.status_code == 200:
+                            result_data = response.json()
+                            
+                            # Safely extract text from the new structured Responses API format
+                            final_answer = ""
+                            for item in result_data.get("output", []):
+                                if item.get("type") == "message" and item.get("role") == "assistant":
+                                    for content_item in item.get("content", []):
+                                        if content_item.get("type") == "output_text":
+                                            final_answer += content_item.get("text", "")
+                            
+                            st.markdown(final_answer)
+                            st.caption("⚡ *Powered by Grok (x.ai) • Native Agent Tools Web Search Active*")
+                        else:
+                            st.error(f"Grok API Error: {response.text}")
                         
                         response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload)
                         
