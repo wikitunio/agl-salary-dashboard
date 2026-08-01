@@ -256,8 +256,7 @@ def main():
                 
         elif exp_error:
             st.error(f"⚠️ {exp_error}")
-# --- SECTION 2C: SMART FINANCIAL INSIGHTS ---
-        # --- SECTION 2C: SMART FINANCIAL INSIGHTS (AI POWERED) ---
+# --- SECTION 2C: SMART FINANCIAL INSIGHTS (AI POWERED) ---
         st.markdown("### 🤖 Smart Financial Insights")
         
         with st.expander(f"Click to view AI-Generated Insights for {month_data['Month']}", expanded=True):
@@ -274,99 +273,6 @@ def main():
                 else:
                     st.markdown("Want a professional AI analysis of your Month-over-Month cash flow?")
                     if st.button(f"✨ Generate AI Insights for {month_data['Month']}"):
-                        with st.spinner(f"AI is analyzing {month_data['Month']} vs {prev_month_data['Month']}..."):
-                            try:
-                                client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                                
-                                # --- Smart Model Selector ---
-                                active_models = [m.id for m in client.models.list().data]
-                                preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                                chosen_model = next((model for model in preferred_models if model in active_models), None)
-                                if not chosen_model:
-                                    valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                                    chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
-                                    
-                                expense_context_curr = total_spent if 'total_spent' in locals() else 0
-                                expense_context_prev = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
-                                
-                                prompt = f"""
-                        Act as an elite Wealth Manager based in Pakistan with deep knowledge of the Pakistan Stock Exchange (PSX), local Asset Management Companies (AMCs), and banking products.
-                        Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
-                        
-                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
-                        
-                        CRITICAL INSTRUCTION: Do NOT use generic terms like "Stocks" or "Mutual Funds". You MUST name specific, well-known Pakistani assets. 
-                        For example: Name specific dividend-paying PSX stocks (e.g., EFERT, HUBC, ENGRO, MEBL), specific ETFs (e.g., MZNP-ETF, NITG-ETF), specific Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen Islamic, NBP Funds), and specific bank accounts (e.g., Meezan Asaan, Bank Islami).
-                        
-                        Output EXACTLY in this Markdown format:
-                        
-                        ### 📊 Recommended Pakistan Portfolio
-                        | Asset Class | Specific Recommendation (Name) | Allocation % | Amount (PKR) | Rationale |
-                        |---|---|---|---|---|
-                        | Emergency Fund | [Specific Bank/Account] | X% | Rs. Y | ... |
-                        | PSX Stocks/ETFs | [Specific Stock/ETF Ticker] | X% | Rs. Y | ... |
-                        | Mutual Funds | [Specific Fund Name] | X% | Rs. Y | ... |
-                        | High-Yield/Islamic | [Specific Product] | X% | Rs. Y | ... |
-                        
-                        *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
-                        
-                        ### 📰 Market Outlook Rationale
-                        Provide 3 punchy bullet points on why these specific assets make sense given the current economic climate in Pakistan.
-                        
-                        **⚠️ AI Disclaimer:** *This allocation is generated based on historical Pakistani market trends and blue-chip performance. Always verify current PSX live prices and Mutual Fund NAVs before investing.*
-                        """
-                                
-                                [CURRENT MONTH: {selected_month}]
-                                - Gross Pay: Rs. {month_data['Gross Pay']:,.0f}
-                                - Net Pay (Take Home): Rs. {month_data['Net Pay']:,.0f}
-                                - Income Tax: Rs. {month_data['Income Tax']:,.0f}
-                                - Site Living (Mess+Club): Rs. {month_data['Mess Bill'] + month_data['Club Bill']:,.0f}
-                                - Out of Pocket Expenses: Rs. {expense_context_curr:,.0f}
-                                
-                                [PREVIOUS MONTH: {prev_month_data['Month']}]
-                                - Gross Pay: Rs. {prev_month_data['Gross Pay']:,.0f}
-                                - Net Pay (Take Home): Rs. {prev_month_data['Net Pay']:,.0f}
-                                - Income Tax: Rs. {prev_month_data['Income Tax']:,.0f}
-                                - Site Living (Mess+Club): Rs. {prev_month_data['Mess Bill'] + prev_month_data['Club Bill']:,.0f}
-                                - Out of Pocket Expenses: Rs. {expense_context_prev:,.0f}
-                                
-                                Write 3 to 4 concise, punchy bullet points using emojis. 
-                                Highlight key changes in income, tax, spending habits, and overall savings efficiency.
-                                Explain what these differences mean practically.
-                                Do NOT write an introduction or conclusion. Output ONLY the bullet points.
-                                """
-                                
-                                completion = client.chat.completions.create(
-                                    model=chosen_model,
-                                    messages=[{"role": "user", "content": prompt}],
-                                    temperature=0.3, # Keep logic tight and analytical
-                                    max_tokens=400
-                                )
-                                
-                                result = completion.choices[0].message.content
-                                result += f"\n\n*(Powered by {chosen_model})*"
-                                
-                                # Save to memory and refresh the UI so it displays smoothly
-                                st.session_state["ai_insights_cache"][cache_key] = result
-                                st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"Groq API Error: {str(e)}")
-            else:
-                st.info("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
-                
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        
-        # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
-        st.divider()
-        st.markdown("### 📈 AI Wealth & Investment Planner")
-        
-        if 'remaining_cash' in locals() and remaining_cash > 0:
-            st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
-            st.caption("Let AI generate a dynamic investment portfolio based on current macroeconomic conditions in Pakistan.")
-            
-            if st.button(f"✨ Generate AI Insights for {month_data['Month']}"):
                         with st.spinner(f"AI is analyzing {month_data['Month']} vs {prev_month_data['Month']}..."):
                             try:
                                 client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
@@ -432,8 +338,74 @@ def main():
                                 
                             except Exception as e:
                                 st.error(f"Groq API Error: {str(e)}")
-
-  # -------------------------                              
+            else:
+                st.info("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        
+        # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
+        st.divider()
+        st.markdown("### 📈 AI Wealth & Investment Planner")
+        
+        if 'remaining_cash' in locals() and remaining_cash > 0:
+            st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
+            st.caption("Let AI generate a dynamic investment portfolio based on current macroeconomic conditions in Pakistan.")
+            
+            if st.button("🔮 Generate Pakistan Market Allocation"):
+                with st.spinner("Analyzing Pakistan inflation, interest rates, and PSX trends..."):
+                    try:
+                        client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+                        
+                        # --- Smart Model Selector ---
+                        active_models = [m.id for m in client.models.list().data]
+                        preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
+                        chosen_model = next((model for model in preferred_models if model in active_models), None)
+                        if not chosen_model:
+                            valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
+                            chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                        
+                        prompt = f"""
+                        Act as an elite Wealth Manager based in Pakistan with deep knowledge of the Pakistan Stock Exchange (PSX), local Asset Management Companies (AMCs), and banking products.
+                        Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
+                        
+                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
+                        
+                        CRITICAL INSTRUCTION: Do NOT use generic terms like "Stocks" or "Mutual Funds". You MUST name specific, well-known Pakistani assets. 
+                        For example: Name specific dividend-paying PSX stocks (e.g., EFERT, HUBC, ENGRO, MEBL), specific ETFs (e.g., MZNP-ETF, NITG-ETF), specific Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen Islamic, NBP Funds), and specific bank accounts (e.g., Meezan Asaan, Bank Islami).
+                        
+                        Output EXACTLY in this Markdown format:
+                        
+                        ### 📊 Recommended Pakistan Portfolio
+                        | Asset Class | Specific Recommendation (Name) | Allocation % | Amount (PKR) | Rationale |
+                        |---|---|---|---|---|
+                        | Emergency Fund | [Specific Bank/Account] | X% | Rs. Y | ... |
+                        | PSX Stocks/ETFs | [Specific Stock/ETF Ticker] | X% | Rs. Y | ... |
+                        | Mutual Funds | [Specific Fund Name] | X% | Rs. Y | ... |
+                        | High-Yield/Islamic | [Specific Product] | X% | Rs. Y | ... |
+                        
+                        *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
+                        
+                        ### 📰 Market Outlook Rationale
+                        Provide 3 punchy bullet points on why these specific assets make sense given the current economic climate in Pakistan.
+                        
+                        **⚠️ AI Disclaimer:** *This allocation is generated based on historical Pakistani market trends and blue-chip performance. Always verify current PSX live prices and Mutual Fund NAVs before investing.*
+                        """
+                        
+                        completion = client.chat.completions.create(
+                            model=chosen_model,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.4,
+                            max_tokens=600
+                        )
+                        
+                        st.markdown(completion.choices[0].message.content)
+                        st.caption(f"⚡ *Powered by {chosen_model} via Groq LPU*")
+                        
+                    except Exception as e:
+                        st.error(f"AI Connection Error: {str(e)}")
+        elif 'remaining_cash' in locals():
+            st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")  # -------------------------                              
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Pay & Tax Trends", 
