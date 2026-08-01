@@ -153,7 +153,7 @@ def fetch_salary_data():
     
     return df
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=6)
 def fetch_expense_data():
     sharepoint_url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQBicSNMjahzTYvn03-bpK36AVWD3NXpwKCBih5ZlUJxSiE?download=1"
     df_exp = pd.DataFrame()
