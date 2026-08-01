@@ -386,7 +386,6 @@ def main():
                         Provide 5 punchy bullet points on why this specific allocation makes sense given the LIVE inflation, state bank policy rates, and economic climate in Pakistan right now based on the web data provided. Include the actual numbers from the web search.
                         """
                         
-                        # --- xAI (Grok) Direct API Call ---
                         # --- xAI (Grok) Agent Tools API (Responses) ---
                         headers = {
                             "Content-Type": "application/json",
@@ -394,13 +393,13 @@ def main():
                         }
                         
                         payload = {
-                            "model": "grok-2-latest", 
-                            "input": [{"role": "user", "content": prompt}], # Changed from 'messages' to 'input'
+                            "model": "grok-4.5", # <--- FIXED: grok-2-latest was deleted by x.ai
+                            "input": [{"role": "user", "content": prompt}], 
                             "temperature": 0.3,
-                            "tools": [{"type": "web_search"}] # The new, clean Agent Tools syntax
+                            "tools": [{"type": "web_search"}] 
                         }
                         
-                        # Pointing to the new Responses endpoint
+                        # Make sure this is pointing to /v1/responses !
                         response = requests.post("https://api.x.ai/v1/responses", headers=headers, json=payload)
                         
                         if response.status_code == 200:
@@ -415,7 +414,7 @@ def main():
                                             final_answer += content_item.get("text", "")
                             
                             st.markdown(final_answer)
-                            st.caption("⚡ *Powered by Grok (x.ai) • Native Agent Tools Web Search Active*")
+                            st.caption("⚡ *Powered by Grok 4.5 (x.ai) • Native Agent Tools Web Search Active*")
                         else:
                             st.error(f"Grok API Error: {response.text}")
                         
