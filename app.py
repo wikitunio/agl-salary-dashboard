@@ -346,72 +346,64 @@ def main():
         
         # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
         st.divider()
-        st.markdown("### 📈 AI Wealth & Investment Planner")
+        st.markdown("### 📈 AI Wealth & Investment Planner (Live Web)")
         
         if 'remaining_cash' in locals() and remaining_cash > 0:
             st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
-            st.caption("Let AI generate a dynamic investment portfolio based on current macroeconomic conditions in Pakistan.")
+            st.caption("Let Gemini AI search the live web to generate a dynamic portfolio based on current KSE-100 and SBP rates.")
             
-            if st.button("🔮 Generate Pakistan Market Allocation"):
-                with st.spinner("Analyzing Pakistan inflation, interest rates, and PSX trends..."):
-                    import google.genai as genai
-
-# Setup client
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-
-# Enable live Google Search grounding
-response = client.models.generate_content(
-    model='gemini-2.0-flash',
-    contents=prompt,
-    config={
-        'tools': [{'google_search': {}}]  # <-- THIS ENABLES LIVE WEB SEARCH
-    }
-)
-
-st.markdown(response.text)
-                        
-                        # Fetch the live date so the AI knows the exact current economic timeline
+            if st.button("🔮 Generate Live Market Allocation"):
+                with st.spinner("Searching the live web for Pakistan inflation, interest rates, and PSX trends..."):
+                    try:
                         import datetime
-                        current_date = datetime.datetime.now().strftime("%B %Y")
+                        from google import genai
+                        
+                        current_date = datetime.datetime.now().strftime("%B %d, %Y")
+                        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"]) 
                         
                         prompt = f"""
                         Act as an elite Wealth Manager based in Pakistan.
                         Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
                         
-                        Consider the current macroeconomic climate of Pakistan as of {current_date} (high interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields).
+                        Consider the current macroeconomic climate of Pakistan as of {current_date} (high interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields). Use your Google Search tool to find today's exact SBP policy rate, KSE-100 index points, and inflation numbers.
+                        
+                        CRITICAL INSTRUCTION: You MUST name specific, well-known Pakistani assets. Do not use generic terms. Name specific PSX stocks (e.g., EFERT, HUBC, ENGRO), ETFs (e.g., MZNP-ETF), Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen), and Bank Accounts (e.g., Meezan Asaan).
                         
                         Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
                         
                         Output EXACTLY in this Markdown format:
                         
                         ### 📊 Recommended Pakistan Portfolio
-                        | Asset Class | Allocation % | Amount (PKR) | Rationale (Pak Market Context) |
-                        |---|---|---|---|
-                        | Emergency Fund / Cash | X% | Rs. Y | ... |
-                        | PSX Stocks / ETFs | X% | Rs. Y | ... |
-                        | Islamic/Income Mutual Funds | X% | Rs. Y | ... |
-                        | High-Yield Savings / Gold | X% | Rs. Y | ... |
+                        | Asset Class | Specific Asset | Allocation % | Amount (PKR) | Rationale (Pak Market Context) |
+                        |---|---|---|---|---|
+                        | Emergency Fund / Cash | [Name] | X% | Rs. Y | ... |
+                        | PSX Stocks / ETFs | [Name] | X% | Rs. Y | ... |
+                        | Islamic/Income Mutual Funds | [Name] | X% | Rs. Y | ... |
+                        | High-Yield Savings / Gold | [Name] | X% | Rs. Y | ... |
                         
                         *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
                         
                         ### 📰 Market Outlook Rationale
-                        Provide 5 punchy bullet points on why this specific allocation makes sense given the current inflation, state bank policy rates, and economic climate in Pakistan right now.
+                        Provide 5 punchy bullet points on why this specific allocation makes sense given the current inflation, state bank policy rates, and economic climate in Pakistan right now. Include the actual data numbers you found via search.
                         """
                         
-                        completion = client.chat.completions.create(
-                            model=chosen_model,
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=0.4,
-                            max_tokens=600
+                        # Call Gemini 2.0 Flash with Google Search enabled
+                        response = client.models.generate_content(
+                            model='gemini-2.0-flash',
+                            contents=prompt,
+                            config={'tools': [{'google_search': {}}]}
                         )
                         
-                        st.markdown(completion.choices[0].message.content)
-                        st.caption(f"⚡ *Powered by {chosen_model} via Groq LPU*")
+                        st.markdown(response.text)
+                        st.caption("⚡ *Powered by Google Gemini 2.0 Flash • Live Web Search Grounding Active*")
                         
                     except Exception as e:
-                        st.error(f"AI Connection Error: {str(e)}")
+                        st.error(f"Gemini API Error: Ensure GEMINI_API_KEY is saved in Secrets! Details: {str(e)}")
+                        
         elif 'remaining_cash' in locals():
-            st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")  # -------------------------                              
+            st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")
+            
+        # -------------------------                              
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Pay & Tax Trends", 
