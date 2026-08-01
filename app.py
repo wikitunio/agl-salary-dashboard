@@ -29,6 +29,36 @@ def check_password():
     else:
         return True
 
+def render_executive_kpi(df):
+    st.markdown("### 📊 Lifetime Executive Summary")
+    
+    # --- Calculations ---
+    total_earnings = df['Gross Pay'].sum()
+    total_tax = df['Income Tax'].sum()
+    
+    # Assuming PF Company Match is equal to Employee Deduction
+    total_pf_saved = (df['PF Deduction'].sum()) * 2 
+    
+    avg_gross = df['Gross Pay'].mean()
+    avg_net = df['Net Pay'].mean()
+    
+    # Find the row with the highest gross salary
+    highest_salary_row = df.loc[df['Gross Pay'].idxmax()]
+    highest_month = highest_salary_row['Month']
+    highest_amount = highest_salary_row['Gross Pay']
+    
+    # --- UI Layout ---
+    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+    
+    kpi1.metric("Total Career Earnings", f"Rs. {total_earnings:,.0f}")
+    kpi2.metric("Total Tax Paid", f"Rs. {total_tax:,.0f}")
+    kpi3.metric("Total PF Saved", f"Rs. {total_pf_saved:,.0f}", help="Employee + Company")
+    
+    kpi4.metric("Avg Monthly Net", f"Rs. {avg_net:,.0f}", f"Gross: {avg_gross:,.0f}", delta_color="off")
+    kpi5.metric("Highest Salary", f"Rs. {highest_amount:,.0f}", f"{highest_month}", delta_color="off")
+    
+    st.divider()
+
 def main():
     if check_password():
         # --- BRANDING & HEADER ---
@@ -41,6 +71,13 @@ def main():
             st.warning("No valid pay slip data could be parsed. Check email formatting.")
             return
 
+        # ---> NEW: INJECT KPI DASHBOARD HERE <---
+        render_executive_kpi(df)
+
+        # --- SIDEBAR CONTROLS ---
+        st.sidebar.markdown("### ⚙️ Financial Engine")
+        st.sidebar.markdown("Isolate a specific tax cycle.")
+        # ... (keep the rest of your main function exactly as it is)
         # --- SIDEBAR CONTROLS ---
         st.sidebar.markdown("### ⚙️ Financial Engine")
         st.sidebar.markdown("Isolate a specific tax cycle.")
