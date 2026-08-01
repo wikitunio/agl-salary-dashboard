@@ -626,96 +626,143 @@ def main():
                 st.plotly_chart(fig_sim, use_container_width=True)
 
         with tab9:
-            st.subheader("🤖 AI Financial Assistant")
-            st.markdown("Ask anything about your income, deductions, or site expenses for this month.")
+            # --- CUSTOM CSS FOR GEMINI-LIKE UI ---
+            st.markdown("""
+            <style>
+            .stChatMessage {
+                background-color: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 14px;
+                padding: 12px 16px;
+                margin-bottom: 12px;
+            }
+            .gemini-badge {
+                background: linear-gradient(135deg, #4285F4, #9B51E0, #D946EF);
+                color: white;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 0.5px;
+                display: inline-block;
+            }
+            </style>
+            """, unsafe_allow_html=True)
 
-            # Initialize chat history in Streamlit session state
+            # --- HEADER BANNER ---
+            head_col1, head_col2 = st.columns([4, 1])
+            with head_col1:
+                st.markdown("## ✨ Gemini Financial Assistant")
+                st.markdown("<span class='gemini-badge'>⚡ Powered by Groq LPU • Live Payslip & Expense Intelligence</span>", unsafe_allow_html=True)
+            with head_col2:
+                if st.button("🗑️ Clear Chat", key="clear_chat_btn", use_container_width=True):
+                    st.session_state["groq_chat_history"] = []
+                    st.rerun()
+
+            st.caption(f"Currently analyzing context for: **{month_data['Month']}** ({selected_fy})")
+            st.divider()
+
+            # Initialize chat history
             if "groq_chat_history" not in st.session_state:
                 st.session_state["groq_chat_history"] = []
 
-            # Display previous chat messages
+            # --- GEMINI-STYLE QUICK PROMPT CHIPS ---
+            selected_chip = None
+            if len(st.session_state["groq_chat_history"]) == 0:
+                st.markdown("##### 💡 Suggested Prompts")
+                chip_col1, chip_col2, chip_col3, chip_col4 = st.columns(4)
+                
+                if chip_col1.button("📉 Net Pay Analysis", use_container_width=True):
+                    selected_chip = "Explain why my Net Pay is what it is this month and highlight the main deductions."
+                if chip_col2.button("🏛️ Tax Breakdown", use_container_width=True):
+                    selected_chip = "Give me a detailed breakdown of my income tax deduction and effective tax rate."
+                if chip_col3.button("🏠 Site Living Audit", use_container_width=True):
+                    selected_chip = "How much did I spend on site living (Mess + Club) and is it covered by my Hard Area allowance?"
+                if chip_col4.button("🎓 Master's Fund Status", use_container_width=True):
+                    selected_chip = "What is my current Provident Fund status and contribution progress toward my goal?"
+                st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- RENDER CHAT HISTORY ---
             for message in st.session_state["groq_chat_history"]:
-                with st.chat_message(message["role"]):
+                avatar = "👤" if message["role"] == "user" else "✨"
+                with st.chat_message(message["role"], avatar=avatar):
                     st.markdown(message["content"])
 
-            # Chat Input Box
-            if prompt := st.chat_input("E.g., Why is my net pay different this month?"):
-                
-                # Show user's question on screen
+            # --- CHAT INPUT & TRIGGER ---
+            user_input = st.chat_input("Ask Gemini anything about your salary, tax, or expenses...")
+            prompt = selected_chip or user_input
+
+            if prompt:
+                # Add User Message
                 st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
-                with st.chat_message("user"):
+                with st.chat_message("user", avatar="👤"):
                     st.markdown(prompt)
 
-                # Dynamically build the context so the AI knows your current financial state
-                expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent}" if 'total_spent' in locals() else "No manual expenses logged this month."
+                # --- BUILD COMPREHENSIVE AI SYSTEM CONTEXT ---
+                expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent:,.0f}" if 'total_spent' in locals() else "No manual expenses logged this month."
                 
                 system_context = f"""
-                You are a highly professional financial AI assistant for an Executive Chemical Engineer at AgriTech Ltd.
-                Always be concise, analytical, and professional. 
+                You are Gemini, an elite, highly intelligent Executive AI Financial Advisor for Waqar Ahmed Tunio, Shift Chemical Engineer at AgriTech Ltd.
+                Your communication style is concise, highly articulate, polite, and executive-ready. 
+                Use clean Markdown formatting, bold key numbers, bullet points, and brief tables where applicable.
+
+                Current Active Financial Context for {month_data['Month']} ({selected_fy}):
                 
-                Here is the user's financial data for the currently selected month ({month_data['Month']}):
-                - Gross Pay: Rs. {month_data['Gross Pay']}
-                - Net Pay (Take Home): Rs. {month_data['Net Pay']}
-                - Basic Salary: Rs. {month_data['Basic Pay']}
-                - Hard Area Allowance: Rs. {month_data['Hard Area']}
-                - Income Tax Deducted: Rs. {month_data['Income Tax']}
-                - Provident Fund (PF) Deduction: Rs. {month_data['PF Deduction']}
-                - Site Mess Bill: Rs. {month_data['Mess Bill']}
-                - Site Club Bill: Rs. {month_data['Club Bill']}
+                [PAYSLIP DATA]
+                - Focus Month: {month_data['Month']}
+                - Gross Pay: Rs. {month_data['Gross Pay']:,.0f}
+                - Basic Salary: Rs. {month_data['Basic Pay']:,.0f}
+                - Hard Area Allowance: Rs. {month_data['Hard Area']:,.0f}
+                - House Rent Allowance: Rs. {month_data['House Rent Allowance']:,.0f}
+                - Other Earnings / Arrears: Rs. {month_data['Other Earnings'] + month_data['Salary Arrears']:,.0f}
+                - Income Tax Deducted: Rs. {month_data['Income Tax']:,.0f}
+                - Provident Fund (PF Cont.): Rs. {month_data['PF Deduction']:,.0f}
+                - Mess Bill: Rs. {month_data['Mess Bill']:,.0f}
+                - Club Bill: Rs. {month_data['Club Bill']:,.0f}
+                - House Rent Deduction: Rs. {month_data['House Rent Deduction']:,.0f}
+                - EOBI: Rs. {month_data['EOBI']:,.0f}
+                - Total Deductions: Rs. {month_data['Total Deductions']:,.0f}
+                - Net Take-Home Pay: Rs. {month_data['Net Pay']:,.0f}
+                - Leave Balance: {month_data['Leave Balance']} Days
                 - {expense_context}
-                
-                Base all of your answers on these exact numbers.
+
+                Answer the user's inquiry strictly using these exact figures. Be accurate, clear, helpful, and insightful.
                 """
 
-                # Prepare the message list for the Groq API
                 messages_for_api = [{"role": "system", "content": system_context}]
                 messages_for_api.extend(st.session_state["groq_chat_history"])
 
-                # Call the Groq API and show a loading spinner
-                with st.chat_message("assistant"):
-                    with st.spinner("Analyzing data..."):
+                # --- CALL GROQ ENGINE WITH GEMINI AVATAR ---
+                with st.chat_message("assistant", avatar="✨"):
+                    with st.spinner("✨ Gemini is thinking..."):
                         try:
-                            # Automatically grabs the key from Streamlit Secrets
                             client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
                             
-                            # --- SMART AUTO-SELECT MODEL LOGIC ---
                             active_models = [m.id for m in client.models.list().data]
-                            
-                            # A ranked list of the best conversational models (Top = Most Preferred)
-                            preferred_models = [
-                                "llama-3.3-70b-versatile",
-                                "llama-3.1-70b-versatile",
-                                "llama-3.1-8b-instant",
-                                "llama3-70b-8192",
-                                "mixtral-8x7b-32768"
-                            ]
-                            
-                            # Find the first model on our preferred list that is currently online
+                            preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
                             chosen_model = next((model for model in preferred_models if model in active_models), None)
-                            
-                            # Extreme fallback: Just pick any model that isn't a "guard" or "vision" model
                             if not chosen_model:
                                 valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
                                 chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
-                            # -------------------------------------
                             
                             completion = client.chat.completions.create(
                                 model=chosen_model, 
                                 messages=messages_for_api,
-                                temperature=0.5,
-                                max_tokens=500
+                                temperature=0.4,
+                                max_tokens=600
                             )
                             
                             response = completion.choices[0].message.content
-                            
-                            # Display a tiny caption so you know exactly which model answered
-                            st.caption(f"*(Powered by {chosen_model})*")
                             st.markdown(response)
+                            st.caption(f"⚡ *Gemini Response Engine • Powered by {chosen_model} via Groq LPU*")
                             
-                            # Save AI's response to history
+                            # Append to history
                             st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
                             
+                            if selected_chip:
+                                st.rerun()
+                            
                         except Exception as e:
-                            st.error(f"Groq API Error: {str(e)}")
+                            st.error(f"Groq API Connection Error: {str(e)}")
 if __name__ == '__main__':
     main()
