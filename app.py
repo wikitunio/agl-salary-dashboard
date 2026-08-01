@@ -350,40 +350,21 @@ def main():
         
         if 'remaining_cash' in locals() and remaining_cash > 0:
             st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
-            st.caption("Let Groq AI search the live web to generate a dynamic portfolio based on current KSE-100 and SBP rates.")
+            st.caption("Let Grok AI (x.ai) search the live web to generate a dynamic portfolio based on current KSE-100 and SBP rates.")
             
             if st.button("🔮 Generate Live Market Allocation"):
-                with st.spinner("Scraping the live web for Pakistan inflation, interest rates, and PSX trends..."):
+                with st.spinner("Grok is searching the live web for Pakistan inflation, interest rates, and PSX trends..."):
                     try:
                         import datetime
-                        from duckduckgo_search import DDGS
+                        import requests
                         
-                        # 1. Scrape the Live Web for current Pakistani economic data
                         current_date = datetime.datetime.now().strftime("%B %d, %Y")
-                        live_news_context = ""
-                        
-                        with DDGS() as ddgs:
-                            results = list(ddgs.text(f"Pakistan KSE-100 index SBP policy rate inflation {current_date}", max_results=4))
-                            live_news_context = "\n".join([r['body'] for r in results])
-                            
-                        # 2. Call Groq
-                        client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                        
-                        active_models = [m.id for m in client.models.list().data]
-                        preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                        chosen_model = next((model for model in preferred_models if model in active_models), None)
-                        if not chosen_model:
-                            valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                            chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
                         
                         prompt = f"""
                         Act as an elite Wealth Manager based in Pakistan.
                         Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
                         
-                        Here is the LIVE economic data scraped from the web today ({current_date}):
-                        {live_news_context}
-                        
-                        Consider this live macroeconomic climate (high interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields).
+                        Consider the current macroeconomic climate of Pakistan as of {current_date} (high interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields). Use your live web search to find today's exact SBP policy rate, KSE-100 index points, and inflation numbers.
                         
                         CRITICAL INSTRUCTION: You MUST name specific, well-known Pakistani assets. Do not use generic terms. Name specific PSX stocks (e.g., EFERT, HUBC, ENGRO), ETFs (e.g., MZNP-ETF), Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen), and Bank Accounts (e.g., Meezan Asaan).
                         
@@ -405,18 +386,32 @@ def main():
                         Provide 5 punchy bullet points on why this specific allocation makes sense given the LIVE inflation, state bank policy rates, and economic climate in Pakistan right now based on the web data provided. Include the actual numbers from the web search.
                         """
                         
-                        completion = client.chat.completions.create(
-                            model=chosen_model,
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=0.4,
-                            max_tokens=600
-                        )
+                        # --- xAI (Grok) Direct API Call ---
+                        headers = {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {st.secrets['XAI_API_KEY']}"
+                        }
                         
-                        st.markdown(completion.choices[0].message.content)
-                        st.caption(f"⚡ *Powered by {chosen_model} via Groq LPU • Live Web Search Scraped via DuckDuckGo*")
+                        payload = {
+                            "model": "grok-2-latest", 
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": 0.3,
+                            # This specific line activates Grok's native Live Web Search Engine!
+                            "tools": [{"type": "web_search"}] 
+                        }
                         
+                        response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload)
+                        
+                        if response.status_code == 200:
+                            result_data = response.json()
+                            final_answer = result_data["choices"][0]["message"]["content"]
+                            st.markdown(final_answer)
+                            st.caption("⚡ *Powered by Grok (x.ai) • Native Live Web Search Active*")
+                        else:
+                            st.error(f"Grok API Error: {response.text}")
+                            
                     except Exception as e:
-                        st.error(f"Error: {str(e)}")
+                        st.error(f"System Error: {str(e)}")
                         
         elif 'remaining_cash' in locals():
             st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")
