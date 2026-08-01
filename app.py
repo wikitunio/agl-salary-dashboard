@@ -365,31 +365,32 @@ def main():
                             valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
                             chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
                         
+                        # Fetch the live date so the AI knows the exact current economic timeline
+                        import datetime
+                        current_date = datetime.datetime.now().strftime("%B %Y")
+                        
                         prompt = f"""
-                        Act as an elite Wealth Manager based in Pakistan with deep knowledge of the Pakistan Stock Exchange (PSX), local Asset Management Companies (AMCs), and banking products.
+                        Act as an elite Wealth Manager based in Pakistan.
                         Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
                         
-                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
+                        Consider the current macroeconomic climate of Pakistan as of {current_date} (high interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields).
                         
-                        CRITICAL INSTRUCTION: Do NOT use generic terms like "Stocks" or "Mutual Funds". You MUST name specific, well-known Pakistani assets. 
-                        For example: Name specific dividend-paying PSX stocks (e.g., EFERT, HUBC, ENGRO, MEBL), specific ETFs (e.g., MZNP-ETF, NITG-ETF), specific Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen Islamic, NBP Funds), and specific bank accounts (e.g., Meezan Asaan, Bank Islami).
+                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
                         
                         Output EXACTLY in this Markdown format:
                         
                         ### 📊 Recommended Pakistan Portfolio
-                        | Asset Class | Specific Recommendation (Name) | Allocation % | Amount (PKR) | Rationale |
-                        |---|---|---|---|---|
-                        | Emergency Fund | [Specific Bank/Account] | X% | Rs. Y | ... |
-                        | PSX Stocks/ETFs | [Specific Stock/ETF Ticker] | X% | Rs. Y | ... |
-                        | Mutual Funds | [Specific Fund Name] | X% | Rs. Y | ... |
-                        | High-Yield/Islamic | [Specific Product] | X% | Rs. Y | ... |
+                        | Asset Class | Allocation % | Amount (PKR) | Rationale (Pak Market Context) |
+                        |---|---|---|---|
+                        | Emergency Fund / Cash | X% | Rs. Y | ... |
+                        | PSX Stocks / ETFs | X% | Rs. Y | ... |
+                        | Islamic/Income Mutual Funds | X% | Rs. Y | ... |
+                        | High-Yield Savings / Gold | X% | Rs. Y | ... |
                         
                         *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
                         
                         ### 📰 Market Outlook Rationale
-                        Provide 3 punchy bullet points on why these specific assets make sense given the current economic climate in Pakistan.
-                        
-                        **⚠️ AI Disclaimer:** *This allocation is generated based on historical Pakistani market trends and blue-chip performance. Always verify current PSX live prices and Mutual Fund NAVs before investing.*
+                        Provide 5 punchy bullet points on why this specific allocation makes sense given the current inflation, state bank policy rates, and economic climate in Pakistan right now.
                         """
                         
                         completion = client.chat.completions.create(
