@@ -230,15 +230,15 @@ def main():
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- SECTION 3: TABS ---
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
             "⚖️ Compare Months",
             "🗄️ Raw Data Export",
-            "💸 Pocket Expenses (Details)"
+            "💸 Pocket Expenses (Log)",
+            "🏛️ Tax Analytics"
         ])
-
         with tab1:
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
@@ -373,6 +373,33 @@ def main():
                     st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
                 else:
                     st.info("No detailed breakdown available for this month.")
+with tab7:
+            st.subheader(f"🏛️ Advanced Tax Analytics ({selected_fy})")
+            
+            # Extract month specific variables
+            gross = month_data['Gross Pay']
+            basic = month_data['Basic Pay']
+            tax = month_data['Income Tax']
+            
+            # Calculate Analytics
+            effective_rate = (tax / gross * 100) if gross > 0 else 0
+            tax_pct_basic = (tax / basic * 100) if basic > 0 else 0
+            cum_tax_fy = df_fy['Income Tax'].sum()
+            
+            st.markdown(f"#### 🔎 Tax Snapshot: {month_data['Month']}")
+            tx1, tx2, tx3, tx4 = st.columns(4)
+            tx1.metric("Income Tax Deducted", f"Rs. {tax:,.0f}")
+            tx2.metric("Effective Tax Rate", f"{effective_rate:.2f}%", help="Tax as a percentage of Total Gross Pay")
+            tx3.metric("Tax % of Basic Pay", f"{tax_pct_basic:.2f}%")
+            tx4.metric(f"Cumulative Tax ({selected_fy})", f"Rs. {cum_tax_fy:,.0f}")
+            
+            st.divider()
+            
+            st.markdown("#### 📈 Monthly Tax Deduction Trend")
+            fig_tax = px.bar(df_fy, x="Month", y="Income Tax", text="Income Tax", template="plotly_white", color_discrete_sequence=['#d62728'])
+            fig_tax.update_traces(texttemplate='Rs. %{text:,.0f}', textposition='outside')
+            fig_tax.update_layout(yaxis_title="Tax Paid (PKR)", margin=dict(t=30, b=0, l=0, r=0))
+            st.plotly_chart(fig_tax, use_container_width=True)
 
 if __name__ == '__main__':
     main()
