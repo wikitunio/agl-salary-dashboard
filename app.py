@@ -682,23 +682,22 @@ def main():
                     selected_chip = "What is my current Provident Fund status and contribution progress toward my goal?"
                 st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- RENDER CHAT HISTORY ---
+            # --- 1. RENDER CHAT HISTORY (ALWAYS ABOVE THE INPUT BOX) ---
             for message in st.session_state["groq_chat_history"]:
                 avatar = "👤" if message["role"] == "user" else "✨"
                 with st.chat_message(message["role"], avatar=avatar):
                     st.markdown(message["content"])
 
-            # --- CHAT INPUT & TRIGGER ---
+            # --- 2. CHAT INPUT BOX ---
             user_input = st.chat_input("Ask Gemini anything about your salary, tax, or expenses...")
             prompt = selected_chip or user_input
 
+            # --- 3. PROCESS NEW INPUT & REFRESH ---
             if prompt:
-                # Add User Message
+                # Add User Message to History
                 st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
-                with st.chat_message("user", avatar="👤"):
-                    st.markdown(prompt)
 
-                # --- BUILD COMPREHENSIVE AI SYSTEM CONTEXT ---
+                # Build Context
                 expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent:,.0f}" if 'total_spent' in locals() else "No manual expenses logged this month."
                 
                 system_context = f"""
@@ -732,37 +731,33 @@ def main():
                 messages_for_api = [{"role": "system", "content": system_context}]
                 messages_for_api.extend(st.session_state["groq_chat_history"])
 
-                # --- CALL GROQ ENGINE WITH GEMINI AVATAR ---
-                with st.chat_message("assistant", avatar="✨"):
-                    with st.spinner("✨ Gemini is thinking..."):
-                        try:
-                            client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                            
-                            active_models = [m.id for m in client.models.list().data]
-                            preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                            chosen_model = next((model for model in preferred_models if model in active_models), None)
-                            if not chosen_model:
-                                valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                                chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
-                            
-                            completion = client.chat.completions.create(
-                                model=chosen_model, 
-                                messages=messages_for_api,
-                                temperature=0.4,
-                                max_tokens=600
-                            )
-                            
-                            response = completion.choices[0].message.content
-                            st.markdown(response)
-                            st.caption(f"⚡ *Gemini Response Engine • Powered by {chosen_model} via Groq LPU*")
-                            
-                            # Append to history
-                            st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
-                            
-                            if selected_chip:
-                                st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"Groq API Connection Error: {str(e)}")
+                # Call Groq Engine
+                try:
+                    client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+                    
+                    active_models = [m.id for m in client.models.list().data]
+                    preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
+                    chosen_model = next((model for model in preferred_models if model in active_models), None)
+                    if not chosen_model:
+                        valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
+                        chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                    
+                    completion = client.chat.completions.create(
+                        model=chosen_model, 
+                        messages=messages_for_api,
+                        temperature=0.4,
+                        max_tokens=600
+                    )
+                    
+                    response = completion.choices[0].message.content
+                    
+                    # Append Response to History
+                    st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
+                    
+                    # FORCE INSTANT REFRESH TO MOVE MESSAGES ABOVE THE INPUT BOX
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Groq API Connection Error: {str(e)}")
 if __name__ == '__main__':
     main()
