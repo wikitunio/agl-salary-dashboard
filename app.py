@@ -650,8 +650,20 @@ def main():
                             # Automatically grabs the key from Streamlit Secrets
                             client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
                             
+                            # --- AUTO-SELECT MODEL LOGIC ---
+                            # Ask Groq for a list of all currently active models
+                            active_models = client.models.list().data
+                            
+                            # Create a simple list of the model IDs
+                            model_names = [m.id for m in active_models]
+                            
+                            # Smart fallback: Try to find a 'llama' model first. 
+                            # If none exist, just pick the very first model Groq says is active.
+                            chosen_model = next((name for name in model_names if "llama" in name.lower()), model_names[0])
+                            # -------------------------------
+                            
                             completion = client.chat.completions.create(
-                                model="llama3-8b-8192", 
+                                model=chosen_model, # <--- Uses the dynamically selected model
                                 messages=messages_for_api,
                                 temperature=0.5,
                                 max_tokens=500
@@ -665,6 +677,5 @@ def main():
                             
                         except Exception as e:
                             st.error(f"Groq API Error: {str(e)}")
-
 if __name__ == '__main__':
     main()
