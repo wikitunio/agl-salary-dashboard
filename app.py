@@ -356,8 +356,7 @@ def main():
                 st.info("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
                 
         st.markdown("<br>", unsafe_allow_html=True)
-        
-# --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
+        # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
         st.divider()
         st.markdown("### 📈 AI Wealth & Investment Planner")
         
