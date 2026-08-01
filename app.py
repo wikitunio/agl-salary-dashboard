@@ -4,6 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 import re
+import requests
+import io
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -158,20 +160,29 @@ def fetch_expense_data():
     error_msg = ""
     
     try:
-        try:
-            # Attempt 1: Hit SharePoint Link
-            xls = pd.ExcelFile(sharepoint_url)
-        except Exception:
-            # Attempt 2: Auto-Fallback to a local file in GitHub if SharePoint is blocking
-            xls = pd.ExcelFile("Salary_Expenses.xlsx")
-            
+        # Browser Spoofing Headers
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x86) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(sharepoint_url, headers=headers)
+        response.raise_for_status() 
+        
+        # Read the Excel file entirely from memory
+        xls = pd.ExcelFile(io.BytesIO(response.content))
+        
         if 'Form1' in xls.sheet_names:
             df_exp = pd.read_excel(xls, sheet_name='Form1')
         elif 'Salary_Expenses' in xls.sheet_names:
             df_exp = pd.read_excel(xls, sheet_name='Salary_Expenses')
             
-    except Exception:
-        error_msg = "Blocked by MUET SharePoint Login Wall, and 'Salary_Expenses.xlsx' was not found in GitHub."
+    except Exception as e:
+        # Fallback to local GitHub file if the network fetch still fails
+        try:
+            xls = pd.ExcelFile("Salary_Expenses.xlsx")
+            if 'Form1' in xls.sheet_names:
+                df_exp = pd.read_excel(xls, sheet_name='Form1')
+            elif 'Salary_Expenses' in xls.sheet_names:
+                df_exp = pd.read_excel(xls, sheet_name='Salary_Expenses')
+        except Exception:
+            error_msg = f"SharePoint fetch failed, and local file missing. Error: {str(e)}"
 
     if not df_exp.empty:
         expected_columns = ['Date', 'Salary Month', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']
@@ -249,7 +260,7 @@ def main():
         col_fy4.metric("PF Saved This Year", f"Rs. {df_fy['PF Deduction'].sum():,.0f}")
         st.divider()
 
-        # --- SECTION 2: FOCUS MONTH SNAPSHOT ---
+        # --- SECTION 2A: FOCUS MONTH SNAPSHOT ---
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         st.markdown("##### 💰 Earnings (Year-over-Year Tracking)")
         earn1, earn2, earn3, earn4 = st.columns(4)
@@ -469,11 +480,9 @@ def main():
             st.download_button(label="📥 Download Complete History as CSV", data=csv, file_name=f"agl_complete_salary_history.csv", mime="text/csv")
 
         with tab6:
-            st.subheader("💸 Personal Cash Flow Monitor")
+            st.subheader("💸 Detailed Pocket Expenses")
             if df_exp.empty:
-                st.warning("⚠️ Streamlit is currently blocked by your University Login Wall.")
-                st.markdown("### How to bypass the block:")
-                st.markdown("1. Go to your GitHub repository.\n2. Click **Add File** > **Upload files**.\n3. Upload your `Salary_Expenses.xlsx` file directly into GitHub.\n4. Streamlit will instantly read the file locally and fix the app!")
+                st.warning("⚠️ Expense file could not be read.")
             else:
                 curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
                 if not curr_exp.empty:
