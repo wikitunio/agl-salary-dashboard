@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from groq import Groq
 
 # --- NEW: Import our background functions from our new file ---
 from data_loader import fetch_salary_data, fetch_expense_data
@@ -305,7 +306,7 @@ def main():
                 
         st.markdown("<br>", unsafe_allow_html=True)
         # --- SECTION 3: TABS ---
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
@@ -313,7 +314,8 @@ def main():
             "🗄️ Raw Data Export",
             "💸 Pocket Expenses (Log)",
             "🏛️ Tax Analytics",
-            "🔮 Salary Simulator"
+            "🔮 Salary Simulator",
+            "🤖 AI Chat Assistant"
         ])
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
@@ -594,6 +596,75 @@ def main():
                 ))
                 fig_sim.update_layout(template="plotly_white", margin=dict(t=20, b=20, l=0, r=0), height=350, showlegend=False)
                 st.plotly_chart(fig_sim, use_container_width=True)
+
+        with tab9:
+            st.subheader("🤖 AI Financial Assistant")
+            st.markdown("Ask anything about your income, deductions, or site expenses for this month.")
+
+            # Initialize chat history in Streamlit session state
+            if "groq_chat_history" not in st.session_state:
+                st.session_state["groq_chat_history"] = []
+
+            # Display previous chat messages
+            for message in st.session_state["groq_chat_history"]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+            # Chat Input Box
+            if prompt := st.chat_input("E.g., Why is my net pay different this month?"):
+                
+                # Show user's question on screen
+                st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+
+                # Dynamically build the context so the AI knows your current financial state
+                expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent}" if 'total_spent' in locals() else "No manual expenses logged this month."
+                
+                system_context = f"""
+                You are a highly professional financial AI assistant for an Executive Chemical Engineer at AgriTech Ltd.
+                Always be concise, analytical, and professional. 
+                
+                Here is the user's financial data for the currently selected month ({month_data['Month']}):
+                - Gross Pay: Rs. {month_data['Gross Pay']}
+                - Net Pay (Take Home): Rs. {month_data['Net Pay']}
+                - Basic Salary: Rs. {month_data['Basic Pay']}
+                - Hard Area Allowance: Rs. {month_data['Hard Area']}
+                - Income Tax Deducted: Rs. {month_data['Income Tax']}
+                - Provident Fund (PF) Deduction: Rs. {month_data['PF Deduction']}
+                - Site Mess Bill: Rs. {month_data['Mess Bill']}
+                - Site Club Bill: Rs. {month_data['Club Bill']}
+                - {expense_context}
+                
+                Base all of your answers on these exact numbers.
+                """
+
+                # Prepare the message list for the Groq API
+                messages_for_api = [{"role": "system", "content": system_context}]
+                messages_for_api.extend(st.session_state["groq_chat_history"])
+
+                # Call the Groq API and show a loading spinner
+                with st.chat_message("assistant"):
+                    with st.spinner("Analyzing data..."):
+                        try:
+                            # Automatically grabs the key from Streamlit Secrets
+                            client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+                            
+                            completion = client.chat.completions.create(
+                                model="llama3-8b-8192", 
+                                messages=messages_for_api,
+                                temperature=0.5,
+                                max_tokens=500
+                            )
+                            
+                            response = completion.choices[0].message.content
+                            st.markdown(response)
+                            
+                            # Save AI's response to history
+                            st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
+                            
+                        except Exception as e:
+                            st.error(f"Groq API Error: {str(e)}")
 
 if __name__ == '__main__':
     main()
