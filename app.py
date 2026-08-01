@@ -409,6 +409,49 @@ def main():
                 height=500
             )
             st.plotly_chart(fig_waterfall, use_container_width=True)
+
+        # --- NEW: SALARY GROWTH ANALYTICS ---
+            st.markdown(f"### 📈 Salary Growth Analytics ({selected_fy})")
+            
+            df_fy_sorted = df_fy.sort_values('Date')
+            if len(df_fy_sorted) >= 2:
+                start_m = df_fy_sorted.iloc[0]
+                end_m = df_fy_sorted.iloc[-1]
+                
+                # Standard Growth Formula: (New - Old) / Old * 100
+                def calc_g(start, end):
+                    return ((end - start) / start * 100) if start > 0 else 0
+                
+                g_gross = calc_g(start_m['Gross Pay'], end_m['Gross Pay'])
+                g_basic = calc_g(start_m['Basic Pay'], end_m['Basic Pay'])
+                g_net = calc_g(start_m['Net Pay'], end_m['Net Pay'])
+                
+                start_allow = start_m['Hard Area'] + start_m['House Rent Allowance'] + start_m['Other Allowances'] + start_m['Other Earnings']
+                end_allow = end_m['Hard Area'] + end_m['House Rent Allowance'] + end_m['Other Allowances'] + end_m['Other Earnings']
+                g_allow = calc_g(start_allow, end_allow)
+                
+                # Lifetime CAGR Calculation
+                df_sorted_all = df.sort_values('Date')
+                days_diff = (df_sorted_all.iloc[-1]['Date'] - df_sorted_all.iloc[0]['Date']).days
+                total_years = max(days_diff / 365.25, 1.0) # Prevents inflation if less than 1 year of data
+                
+                first_gross = df_sorted_all.iloc[0]['Gross Pay']
+                last_gross = df_sorted_all.iloc[-1]['Gross Pay']
+                cagr = (((last_gross / first_gross) ** (1 / total_years)) - 1) * 100 if first_gross > 0 else 0
+                
+                st.caption(f"**Period Tracking:** {start_m['Month']} ➡️ {end_m['Month']}")
+                
+                gr1, gr2, gr3, gr4, gr5 = st.columns(5)
+                gr1.metric("Gross Salary Growth", f"{'+' if g_gross >= 0 else ''}{g_gross:.1f}%")
+                gr2.metric("Basic Salary Growth", f"{'+' if g_basic >= 0 else ''}{g_basic:.1f}%")
+                gr3.metric("Allowance Growth", f"{'+' if g_allow >= 0 else ''}{g_allow:.1f}%")
+                gr4.metric("Net Salary Growth", f"{'+' if g_net >= 0 else ''}{g_net:.1f}%")
+                gr5.metric("Gross Salary CAGR", f"{'+' if cagr >= 0 else ''}{cagr:.1f}%", help=f"Lifetime Compound Annual Growth Rate ({total_years:.1f} years)")
+                
+            else:
+                st.info(f"Not enough data in {selected_fy} to calculate growth metrics. Need at least 2 months of history.")
+            
+            st.divider()
             
             st.divider()
             
