@@ -160,7 +160,7 @@ def main():
         net3.metric("Leave Balance", f"{month_data['Leave Balance']} Days", delta=get_mom_delta("Leave Balance"))
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- SECTION 2B: MAIN DASHBOARD EXPENSES ---
+        # --- SECTION 2B: CASH FLOW & FINANCIAL HEALTH ---
         df_exp, exp_error = fetch_expense_data()
         
         if not df_exp.empty:
@@ -170,13 +170,40 @@ def main():
             prev_exp_month_name = prev_month_data['Month'] if prev_month_data is not None else None
             prev_exp = df_exp[df_exp['Salary Month'] == prev_exp_month_name] if prev_exp_month_name else pd.DataFrame()
             
-            st.markdown("##### 🛍️ Out-of-Pocket Expenses (Month-over-Month Tracking)")
+            st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
                 category_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
                 total_spent = category_sums.sum()
                 net_pay = month_data['Net Pay']
                 remaining_cash = net_pay - total_spent
+                
+                # --- NEW: FINANCIAL HEALTH ENGINE ---
+                # 1. Savings Rate Calculation
+                savings_rate = (remaining_cash / net_pay * 100) if net_pay > 0 else 0
+                
+                # 2. PF Growth Rate Calculation
+                total_pf = month_data['PF Deduction'] * 2 # Employee + Company Match
+                pf_rate = (total_pf / month_data['Gross Pay'] * 100) if month_data['Gross Pay'] > 0 else 0
+                
+                # 3. Site Efficiency Calculation
+                site_expenses = month_data['Mess Bill'] + month_data['Club Bill']
+                hard_area = month_data['Hard Area']
+                site_ratio = (site_expenses / hard_area * 100) if hard_area > 0 else 100
+                
+                # 4. Grading Logic
+                score_savings = min(50, (max(0, savings_rate) / 30) * 50) # Target: 30% savings rate (50 pts)
+                score_pf = min(30, (pf_rate / 10) * 30)                   # Target: 10% of gross in PF (30 pts)
+                score_site = 20 if site_ratio <= 100 else max(0, 20 - (site_ratio - 100)) # Target: Mess/Club < Hard Area (20 pts)
+                
+                health_score = int(score_savings + score_pf + score_site)
+                
+                # 5. Star Rating Assessment
+                if health_score >= 90: stars = "⭐⭐⭐⭐⭐ Excellent"
+                elif health_score >= 70: stars = "⭐⭐⭐⭐ Good"
+                elif health_score >= 50: stars = "⭐⭐⭐ Fair"
+                else: stars = "⭐⭐ Needs Attention"
+                # ------------------------------------
                 
                 # Total MoM Calculation
                 total_mom_str = None
@@ -186,9 +213,12 @@ def main():
                     sign = "+" if diff >= 0 else "-"
                     total_mom_str = f"{sign} Rs. {abs(diff):,.0f} MoM"
                 
+                # Render Executive Health Metrics
                 ex_cols = st.columns(4)
                 ex_cols[0].metric("Total Spent", f"Rs. {total_spent:,.0f}", delta=total_mom_str, delta_color="inverse")
                 ex_cols[1].metric("Remaining Cash", f"Rs. {remaining_cash:,.0f}")
+                ex_cols[2].metric("True Savings Rate", f"{savings_rate:.1f}%")
+                ex_cols[3].metric("Financial Health", f"{health_score} / 100", stars, delta_color="off")
                 
                 st.markdown("###### Main Categories Logged")
                 
@@ -227,7 +257,6 @@ def main():
             st.error(f"⚠️ {exp_error}")
 
         st.markdown("<br>", unsafe_allow_html=True)
-
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📊 Pay & Tax Trends", 
