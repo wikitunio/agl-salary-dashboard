@@ -77,10 +77,6 @@ def main():
         # --- SIDEBAR CONTROLS ---
         st.sidebar.markdown("### ⚙️ Financial Engine")
         st.sidebar.markdown("Isolate a specific tax cycle.")
-        # ... (keep the rest of your main function exactly as it is)
-        # --- SIDEBAR CONTROLS ---
-        st.sidebar.markdown("### ⚙️ Financial Engine")
-        st.sidebar.markdown("Isolate a specific tax cycle.")
         
         available_fys = sorted(df['FY'].unique(), reverse=True)
         selected_fy = st.sidebar.selectbox("1. Select Financial Year", options=available_fys)
@@ -95,6 +91,9 @@ def main():
         
         month_data = df_fy[df_fy['Month_Name'] == selected_month].iloc[0]
         
+        st.sidebar.markdown("---")
+        st.sidebar.caption("✅ Version 3.1: Modular + Tax Tab")
+
         # --- DELTA ENGINE (YoY & MoM) ---
         prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
         current_index = df[df['Date'] == month_data['Date']].index[0]
@@ -239,6 +238,7 @@ def main():
             "💸 Pocket Expenses (Log)",
             "🏛️ Tax Analytics"
         ])
+
         with tab1:
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
@@ -364,7 +364,7 @@ def main():
             st.download_button(label="📥 Download Complete History as CSV", data=csv, file_name=f"agl_complete_salary_history.csv", mime="text/csv")
 
         with tab6:
-            st.subheader("💸 Detailed Pocket Expenses")
+            st.subheader("📝 Complete Expense Log")
             if df_exp.empty:
                 st.warning("⚠️ Expense file could not be read.")
             else:
@@ -373,7 +373,8 @@ def main():
                     st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
                 else:
                     st.info("No detailed breakdown available for this month.")
-with tab7:
+                    
+        with tab7:
             st.subheader(f"🏛️ Advanced Tax Analytics ({selected_fy})")
             
             # Extract month specific variables
