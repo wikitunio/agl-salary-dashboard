@@ -154,19 +154,34 @@ def fetch_salary_data():
 @st.cache_data(ttl=600)
 def fetch_expense_data():
     sharepoint_url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQBicSNMjahzTYvn03-bpK36AVWD3NXpwKCBih5ZlUJxSiE?download=1"
+    df_exp = pd.DataFrame()
+    error_msg = ""
+    
     try:
-        df_exp = pd.read_excel(sharepoint_url, sheet_name='Form1')
+        try:
+            # Attempt 1: Hit SharePoint Link
+            xls = pd.ExcelFile(sharepoint_url)
+        except Exception:
+            # Attempt 2: Auto-Fallback to a local file in GitHub if SharePoint is blocking
+            xls = pd.ExcelFile("Salary_Expenses.xlsx")
+            
+        if 'Form1' in xls.sheet_names:
+            df_exp = pd.read_excel(xls, sheet_name='Form1')
+        elif 'Salary_Expenses' in xls.sheet_names:
+            df_exp = pd.read_excel(xls, sheet_name='Salary_Expenses')
+            
+    except Exception:
+        error_msg = "Blocked by MUET SharePoint Login Wall, and 'Salary_Expenses.xlsx' was not found in GitHub."
+
+    if not df_exp.empty:
         expected_columns = ['Date', 'Salary Month', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']
-        
         available_columns = [col for col in expected_columns if col in df_exp.columns]
         df_exp = df_exp[available_columns]
         
         if 'Amount (PKR)' in df_exp.columns:
             df_exp = df_exp.dropna(subset=['Amount (PKR)'])
             
-        return df_exp
-    except Exception as e:
-        return pd.DataFrame() 
+    return df_exp, error_msg
 
 def main():
     if check_password():
@@ -262,6 +277,62 @@ def main():
         net2.metric("Net Pay (Take Home)", f"Rs. {month_data['Net Pay']:,.0f}", delta=get_mom_delta("Net Pay"))
         net3.metric("Leave Balance", f"{month_data['Leave Balance']} Days", delta=get_mom_delta("Leave Balance"))
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        # --- SECTION 2B: MAIN DASHBOARD EXPENSES ---
+        df_exp, exp_error = fetch_expense_data()
+        
+        if not df_exp.empty:
+            df_exp['Salary Month'] = df_exp['Salary Month'].astype(str).str.strip()
+            curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
+            
+            prev_exp_month_name = prev_month_data['Month'] if prev_month_data is not None else None
+            prev_exp = df_exp[df_exp['Salary Month'] == prev_exp_month_name] if prev_exp_month_name else pd.DataFrame()
+            
+            st.markdown("##### 🛍️ Out-of-Pocket Expenses (Month-over-Month Tracking)")
+            
+            if not curr_exp.empty:
+                category_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
+                total_spent = category_sums.sum()
+                net_pay = month_data['Net Pay']
+                remaining_cash = net_pay - total_spent
+                
+                # Total MoM Calculation
+                total_mom_str = None
+                if not prev_exp.empty:
+                    prev_total = prev_exp['Amount (PKR)'].sum()
+                    diff = total_spent - prev_total
+                    sign = "+" if diff >= 0 else "-"
+                    total_mom_str = f"{sign} Rs. {abs(diff):,.0f} MoM"
+                
+                ex_cols = st.columns(4)
+                ex_cols[0].metric("Total Spent", f"Rs. {total_spent:,.0f}", delta=total_mom_str, delta_color="inverse")
+                ex_cols[1].metric("Remaining Cash", f"Rs. {remaining_cash:,.0f}")
+                
+                st.markdown("###### Main Categories Logged")
+                
+                def get_cat_mom_delta(cat, curr_val):
+                    if not prev_exp.empty and cat in prev_exp['Category'].values:
+                        prev_val = prev_exp[prev_exp['Category'] == cat]['Amount (PKR)'].sum()
+                        diff = curr_val - prev_val
+                        sign = "+" if diff >= 0 else "-"
+                        return f"{sign} Rs. {abs(diff):,.0f} MoM"
+                    return None
+                    
+                categories = category_sums.index.tolist()
+                for i in range(0, len(categories), 4):
+                    cols = st.columns(4)
+                    for j in range(4):
+                        if i + j < len(categories):
+                            cat = categories[i+j]
+                            val = category_sums[cat]
+                            cols[j].metric(cat, f"Rs. {val:,.0f}", delta=get_cat_mom_delta(cat, val), delta_color="inverse")
+            else:
+                st.info(f"No manual expenses logged yet for {month_data['Month']}.")
+                
+        elif exp_error:
+            st.error(f"⚠️ {exp_error}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -270,7 +341,7 @@ def main():
             "🎓 Master's Fund Tracker",
             "⚖️ Compare Months",
             "🗄️ Raw Data Export",
-            "💸 Pocket Expenses"
+            "💸 Pocket Expenses (Details)"
         ])
 
         with tab1:
@@ -399,43 +470,26 @@ def main():
 
         with tab6:
             st.subheader("💸 Personal Cash Flow Monitor")
-            st.markdown("Tracking your out-of-pocket expenses against your Net Pay.")
-            
-            df_exp = fetch_expense_data()
-            
             if df_exp.empty:
-                st.warning("⚠️ Expense data not found. Please verify the SharePoint link permissions.")
+                st.warning("⚠️ Streamlit is currently blocked by your University Login Wall.")
+                st.markdown("### How to bypass the block:")
+                st.markdown("1. Go to your GitHub repository.\n2. Click **Add File** > **Upload files**.\n3. Upload your `Salary_Expenses.xlsx` file directly into GitHub.\n4. Streamlit will instantly read the file locally and fix the app!")
             else:
-                df_exp['Salary Month'] = df_exp['Salary Month'].astype(str)
-                month_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
-                
-                total_spent = month_exp['Amount (PKR)'].sum()
-                net_pay = month_data['Net Pay']
-                remaining_cash = net_pay - total_spent
-                savings_rate = (remaining_cash / net_pay) * 100 if net_pay > 0 else 0
-                
-                ec1, ec2, ec3, ec4 = st.columns(4)
-                ec1.metric("Net Pay (Inbound)", f"Rs. {net_pay:,.0f}")
-                ec2.metric("Total Spent", f"Rs. {total_spent:,.0f}")
-                ec3.metric("Remaining Cash", f"Rs. {remaining_cash:,.0f}")
-                ec4.metric("True Savings Rate", f"{savings_rate:.1f}%")
-                
-                st.divider()
-                
-                col_ex1, col_ex2 = st.columns([1, 1])
-                with col_ex1:
-                    st.markdown(f"#### Expense Breakdown ({month_data['Month']})")
-                    if total_spent > 0:
-                        fig_exp = px.pie(month_exp, values='Amount (PKR)', names='Category', hole=0.4, template="plotly_white")
+                curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
+                if not curr_exp.empty:
+                    col_ex1, col_ex2 = st.columns([1, 1])
+                    with col_ex1:
+                        st.markdown(f"#### Expense Breakdown ({month_data['Month']})")
+                        fig_exp = px.pie(curr_exp, values='Amount (PKR)', names='Category', hole=0.4, template="plotly_white")
                         fig_exp.update_traces(textposition='inside', textinfo='percent+label')
                         fig_exp.update_layout(showlegend=False)
                         st.plotly_chart(fig_exp, use_container_width=True)
-                    else:
-                        st.info("No expenses recorded for this month yet.")
-                
-                with col_ex2:
-                    st.markdown("#### Expense Log")
-                    st.dataframe(month_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
+                    
+                    with col_ex2:
+                        st.markdown("#### Detail Log")
+                        st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
+                else:
+                    st.info("No detailed breakdown available for this month.")
 
 if __name__ == '__main__':
     main()
