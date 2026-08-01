@@ -240,6 +240,44 @@ def main():
         ])
 
         with tab1:
+            st.subheader("💧 Salary Waterfall Breakdown")
+            
+            # Prepare Waterfall Data based on the selected month
+            wf_gross = month_data['Gross Pay']
+            wf_tax = month_data['Income Tax']
+            wf_pf = month_data['PF Deduction']
+            wf_mess = month_data['Mess Bill']
+            wf_club = month_data['Club Bill']
+            wf_rent = month_data['House Rent Deduction']
+            wf_eobi = month_data['EOBI']
+            wf_net = month_data['Net Pay']
+            
+            # Build the Plotly Waterfall Chart
+            fig_waterfall = go.Figure(go.Waterfall(
+                name="Salary", orientation="v",
+                measure=["relative", "relative", "relative", "relative", "relative", "relative", "relative", "total"],
+                x=["Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "Rent Deduction", "EOBI", "Net Pay"],
+                textposition="outside",
+                text=[f"{wf_gross:,.0f}", f"-{wf_tax:,.0f}", f"-{wf_pf:,.0f}", f"-{wf_mess:,.0f}", f"-{wf_club:,.0f}", f"-{wf_rent:,.0f}", f"-{wf_eobi:,.0f}", f"{wf_net:,.0f}"],
+                y=[wf_gross, -wf_tax, -wf_pf, -wf_mess, -wf_club, -wf_rent, -wf_eobi, wf_net],
+                connector={"line": {"color": "gray", "width": 1.5}},
+                decreasing={"marker": {"color": "#ff4b4b"}},   # Streamlit Red for deductions
+                increasing={"marker": {"color": "#2ca02c"}},   # Green for starting Gross Pay
+                totals={"marker": {"color": "#1f77b4"}}        # Blue for final Take-Home
+            ))
+            
+            fig_waterfall.update_layout(
+                template="plotly_white", 
+                margin=dict(t=30, b=20, l=0, r=0),
+                yaxis_title="Rupees (PKR)",
+                showlegend=False,
+                height=450
+            )
+            st.plotly_chart(fig_waterfall, use_container_width=True)
+            
+            st.divider()
+            
+            # Keep original charts below the waterfall
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
                 st.subheader(f"Earnings Curve ({selected_fy})")
@@ -256,13 +294,11 @@ def main():
                 if unaccounted_deductions > 5:
                     deduction_labels.append("⚠️ Unmapped Deductions")
                     fy_deduction_values.append(unaccounted_deductions)
-                    st.warning(f"Detected Rs. {unaccounted_deductions:,.0f} in unmapped deductions this month!")
-                
+                    
                 fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.5, template="plotly_white")
                 fig_pie.update_traces(textposition='inside', textinfo='percent')
                 fig_pie.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5))
                 st.plotly_chart(fig_pie, use_container_width=True)
-
         with tab2:
             col_house1, col_house2 = st.columns(2)
             with col_house1:
