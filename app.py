@@ -397,7 +397,7 @@ def main():
                             "messages": [{"role": "user", "content": prompt}],
                             "temperature": 0.3,
                             # This specific line activates Grok's native Live Web Search Engine!
-                            "tools": [{"type": "web_search"}] 
+                            "tools": [{"type": "live_search"}] 
                         }
                         
                         response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload)
