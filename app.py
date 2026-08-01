@@ -290,8 +290,31 @@ def main():
                                 expense_context_prev = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
                                 
                                 prompt = f"""
-                                Act as a corporate financial advisor for an Executive Chemical Engineer at AgriTech Ltd. 
-                                Analyze the Month-over-Month changes between {selected_month} and {prev_month_data['Month']}:
+                        Act as an elite Wealth Manager based in Pakistan with deep knowledge of the Pakistan Stock Exchange (PSX), local Asset Management Companies (AMCs), and banking products.
+                        Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
+                        
+                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
+                        
+                        CRITICAL INSTRUCTION: Do NOT use generic terms like "Stocks" or "Mutual Funds". You MUST name specific, well-known Pakistani assets. 
+                        For example: Name specific dividend-paying PSX stocks (e.g., EFERT, HUBC, ENGRO, MEBL), specific ETFs (e.g., MZNP-ETF, NITG-ETF), specific Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen Islamic, NBP Funds), and specific bank accounts (e.g., Meezan Asaan, Bank Islami).
+                        
+                        Output EXACTLY in this Markdown format:
+                        
+                        ### 📊 Recommended Pakistan Portfolio
+                        | Asset Class | Specific Recommendation (Name) | Allocation % | Amount (PKR) | Rationale |
+                        |---|---|---|---|---|
+                        | Emergency Fund | [Specific Bank/Account] | X% | Rs. Y | ... |
+                        | PSX Stocks/ETFs | [Specific Stock/ETF Ticker] | X% | Rs. Y | ... |
+                        | Mutual Funds | [Specific Fund Name] | X% | Rs. Y | ... |
+                        | High-Yield/Islamic | [Specific Product] | X% | Rs. Y | ... |
+                        
+                        *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
+                        
+                        ### 📰 Market Outlook Rationale
+                        Provide 3 punchy bullet points on why these specific assets make sense given the current economic climate in Pakistan.
+                        
+                        **⚠️ AI Disclaimer:** *This allocation is generated based on historical Pakistani market trends and blue-chip performance. Always verify current PSX live prices and Mutual Fund NAVs before investing.*
+                        """
                                 
                                 [CURRENT MONTH: {selected_month}]
                                 - Gross Pay: Rs. {month_data['Gross Pay']:,.0f}
