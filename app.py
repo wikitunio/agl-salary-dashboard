@@ -356,6 +356,8 @@ def main():
                 st.info("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
                 
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        
         # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
         st.divider()
         st.markdown("### 📈 AI Wealth & Investment Planner")
@@ -377,46 +379,43 @@ def main():
                                     valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
                                     chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
                                     
-                                # --- PRE-FORMAT VARIABLES TO AVOID PYTHON F-STRING PARSER ERRORS ---
-                                cur_gross = f"Rs. {month_data['Gross Pay']:,.0f}"
-                                cur_net = f"Rs. {month_data['Net Pay']:,.0f}"
-                                cur_tax = f"Rs. {month_data['Income Tax']:,.0f}"
-                                cur_site = f"Rs. {month_data['Mess Bill'] + month_data['Club Bill']:,.0f}"
+                                # --- SAFE PRE-FORMATTED STRINGS ---
+                                g_curr = "{:,.0f}".format(month_data['Gross Pay'])
+                                n_curr = "{:,.0f}".format(month_data['Net Pay'])
+                                t_curr = "{:,.0f}".format(month_data['Income Tax'])
+                                s_curr = "{:,.0f}".format(month_data['Mess Bill'] + month_data['Club Bill'])
                                 
-                                expense_context_curr_val = total_spent if 'total_spent' in locals() else 0
-                                cur_exp = f"Rs. {expense_context_curr_val:,.0f}"
+                                exp_c_val = total_spent if 'total_spent' in locals() else 0
+                                e_curr = "{:,.0f}".format(exp_c_val)
                                 
-                                prev_gross = f"Rs. {prev_month_data['Gross Pay']:,.0f}"
-                                prev_net = f"Rs. {prev_month_data['Net Pay']:,.0f}"
-                                prev_tax = f"Rs. {prev_month_data['Income Tax']:,.0f}"
-                                prev_site = f"Rs. {prev_month_data['Mess Bill'] + prev_month_data['Club Bill']:,.0f}"
+                                g_prev = "{:,.0f}".format(prev_month_data['Gross Pay'])
+                                n_prev = "{:,.0f}".format(prev_month_data['Net Pay'])
+                                t_prev = "{:,.0f}".format(prev_month_data['Income Tax'])
+                                s_prev = "{:,.0f}".format(prev_month_data['Mess Bill'] + prev_month_data['Club Bill'])
                                 
-                                expense_context_prev_val = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
-                                prev_exp_str = f"Rs. {expense_context_prev_val:,.0f}"
+                                exp_p_val = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
+                                e_prev = "{:,.0f}".format(exp_p_val)
                                 
-                                prompt = f"""
-                                Act as a corporate financial advisor for an Executive Chemical Engineer at AgriTech Ltd. 
-                                Analyze the Month-over-Month changes between {selected_month} and {prev_month_data['Month']}:
-                                
-                                [CURRENT MONTH: {selected_month}]
-                                - Gross Pay: {cur_gross}
-                                - Net Pay (Take Home): {cur_net}
-                                - Income Tax: {cur_tax}
-                                - Site Living (Mess+Club): {cur_site}
-                                - Out of Pocket Expenses: {cur_exp}
-                                
-                                [PREVIOUS MONTH: {prev_month_data['Month']}]
-                                - Gross Pay: {prev_gross}
-                                - Net Pay (Take Home): {prev_net}
-                                - Income Tax: {prev_tax}
-                                - Site Living (Mess+Club): {prev_site}
-                                - Out of Pocket Expenses: {prev_exp_str}
-                                
-                                Write 3 to 4 concise, punchy bullet points using emojis. 
-                                Highlight key changes in income, tax, spending habits, and overall savings efficiency.
-                                Explain what these differences mean practically.
-                                Do NOT write an introduction or conclusion. Output ONLY the bullet points.
-                                """
+                                prompt = (
+                                    "Act as a corporate financial advisor for an Executive Chemical Engineer at AgriTech Ltd. "
+                                    f"Analyze the Month-over-Month changes between {selected_month} and {prev_month_data['Month']}:\n\n"
+                                    f"[CURRENT MONTH: {selected_month}]\n"
+                                    f"- Gross Pay: Rs. {g_curr}\n"
+                                    f"- Net Pay (Take Home): Rs. {n_curr}\n"
+                                    f"- Income Tax: Rs. {t_curr}\n"
+                                    f"- Site Living (Mess+Club): Rs. {s_curr}\n"
+                                    f"- Out of Pocket Expenses: Rs. {e_curr}\n\n"
+                                    f"[PREVIOUS MONTH: {prev_month_data['Month']}]\n"
+                                    f"- Gross Pay: Rs. {g_prev}\n"
+                                    f"- Net Pay (Take Home): Rs. {n_prev}\n"
+                                    f"- Income Tax: Rs. {t_prev}\n"
+                                    f"- Site Living (Mess+Club): Rs. {s_prev}\n"
+                                    f"- Out of Pocket Expenses: Rs. {e_prev}\n\n"
+                                    "Write 3 to 4 concise, punchy bullet points using emojis. "
+                                    "Highlight key changes in income, tax, spending habits, and overall savings efficiency. "
+                                    "Explain what these differences mean practically. "
+                                    "Do NOT write an introduction or conclusion. Output ONLY the bullet points."
+                                )
                                 
                                 completion = client.chat.completions.create(
                                     model=chosen_model,
@@ -432,7 +431,9 @@ def main():
                                 st.rerun()
                                 
                             except Exception as e:
-                                st.error(f"Groq API Error: {str(e)}")        
+                                st.error(f"Groq API Error: {str(e)}")
+
+  # -------------------------                              
         # --- SECTION 3: TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Pay & Tax Trends", 
