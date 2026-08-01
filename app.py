@@ -305,16 +305,16 @@ def main():
                 
         st.markdown("<br>", unsafe_allow_html=True)
         # --- SECTION 3: TABS ---
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
             "⚖️ Compare Months",
             "🗄️ Raw Data Export",
             "💸 Pocket Expenses (Log)",
-            "🏛️ Tax Analytics"
+            "🏛️ Tax Analytics",
+            "🔮 Salary Simulator"
         ])
-
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
@@ -542,6 +542,58 @@ def main():
             fig_tax.update_traces(texttemplate='Rs. %{text:,.0f}', textposition='outside')
             fig_tax.update_layout(yaxis_title="Tax Paid (PKR)", margin=dict(t=30, b=0, l=0, r=0))
             st.plotly_chart(fig_tax, use_container_width=True)
+        with tab8:
+            st.subheader("🔮 Salary & Promotion Simulator")
+            st.markdown("Play with the numbers below to see how a promotion, increment, or tax change affects your take-home pay.")
+            
+            sim_col1, sim_col2 = st.columns([1, 1])
+            
+            with sim_col1:
+                st.markdown("#### 📈 Income Adjustments")
+                sim_basic = st.number_input("Basic Salary", value=float(month_data['Basic Pay']), step=1000.0)
+                sim_hard_area = st.number_input("Hard Area Allowance", value=float(month_data['Hard Area']), step=500.0)
+                sim_hra = st.number_input("House Rent Allowance", value=float(month_data['House Rent Allowance']), step=500.0)
+                sim_other_earn = st.number_input("Other Earnings / Allowances", value=float(month_data['Other Earnings'] + month_data['Other Allowances']), step=500.0)
+                
+                st.markdown("#### 📉 Deduction Adjustments")
+                sim_tax = st.number_input("Estimated Income Tax", value=float(month_data['Income Tax']), step=500.0)
+                sim_pf = st.number_input("PF Deduction", value=float(month_data['PF Deduction']), step=100.0)
+                sim_mess_club = st.number_input("Estimated Mess & Club", value=float(month_data['Mess Bill'] + month_data['Club Bill']), step=500.0)
+                sim_rent_ded = st.number_input("House Rent Deduction", value=float(month_data['House Rent Deduction']), step=100.0)
+                sim_eobi = st.number_input("EOBI", value=float(month_data['EOBI']), step=10.0)
+
+            with sim_col2:
+                # Calculate Simulated Totals
+                sim_gross = sim_basic + sim_hard_area + sim_hra + sim_other_earn
+                sim_total_deductions = sim_tax + sim_pf + sim_mess_club + sim_rent_ded + sim_eobi
+                sim_net = sim_gross - sim_total_deductions
+                
+                # Calculate Deltas (Differences from Current Month)
+                diff_gross = sim_gross - month_data['Gross Pay']
+                diff_net = sim_net - month_data['Net Pay']
+                
+                st.markdown("#### 📊 Projected Outcome")
+                st.metric("Projected Gross Pay", f"Rs. {sim_gross:,.0f}", f"{'+' if diff_gross >=0 else ''}{diff_gross:,.0f} from current")
+                st.metric("Projected Net Take-Home", f"Rs. {sim_net:,.0f}", f"{'+' if diff_net >=0 else ''}{diff_net:,.0f} from current")
+                st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
+                
+                st.divider()
+                
+                # Mini Simulator Waterfall Chart
+                fig_sim = go.Figure(go.Waterfall(
+                    name="Simulation", orientation="v",
+                    measure=["relative", "relative", "total"],
+                    x=["Simulated Gross", "Total Deductions", "Simulated Net"],
+                    textposition="outside",
+                    text=[f"{sim_gross:,.0f}", f"-{sim_total_deductions:,.0f}", f"{sim_net:,.0f}"],
+                    y=[sim_gross, -sim_total_deductions, sim_net],
+                    connector={"line": {"color": "gray", "width": 1.5}},
+                    decreasing={"marker": {"color": "#ff4b4b"}},
+                    increasing={"marker": {"color": "#2ca02c"}},
+                    totals={"marker": {"color": "#1f77b4"}}
+                ))
+                fig_sim.update_layout(template="plotly_white", margin=dict(t=20, b=20, l=0, r=0), height=350, showlegend=False)
+                st.plotly_chart(fig_sim, use_container_width=True)
 
 if __name__ == '__main__':
     main()
