@@ -257,52 +257,80 @@ def main():
         elif exp_error:
             st.error(f"⚠️ {exp_error}")
 # --- SECTION 2C: SMART FINANCIAL INSIGHTS ---
+        # --- SECTION 2C: SMART FINANCIAL INSIGHTS (AI POWERED) ---
         st.markdown("### 🤖 Smart Financial Insights")
         
-        insights = []
-        
-        if prev_month_data is not None:
-            # 1. Income Detection
-            gross_diff = month_data['Gross Pay'] - prev_month_data['Gross Pay']
-            if gross_diff > 0:
-                insights.append(f"🟢 **Income Growth:** Gross Pay increased by **Rs. {gross_diff:,.0f}** MoM. (Check for arrears or increased allowances).")
-            elif gross_diff < 0:
-                insights.append(f"🔴 **Income Drop:** Gross Pay decreased by **Rs. {abs(gross_diff):,.0f}**. (Verify if last month had one-time bonuses).")
+        with st.expander(f"Click to view AI-Generated Insights for {month_data['Month']}", expanded=True):
+            if prev_month_data is not None:
+                # Define a unique memory key for this month so we only call the API once per month
+                cache_key = f"insights_{selected_month}_{selected_fy}"
                 
-            # 2. Tax Detection
-            tax_diff = month_data['Income Tax'] - prev_month_data['Income Tax']
-            if tax_diff > 0:
-                insights.append(f"⚠️ **Tax Alert:** Income tax deduction rose by **Rs. {tax_diff:,.0f}** this month.")
-            elif tax_diff < 0:
-                insights.append(f"✅ **Tax Savings:** Income tax deduction dropped by **Rs. {abs(tax_diff):,.0f}**.")
-                
-            # 3. Expense & Budget Detection
-            if 'df_exp' in locals() and not df_exp.empty and not prev_exp.empty and not curr_exp.empty:
-                exp_diff = total_spent - prev_exp['Amount (PKR)'].sum()
-                if exp_diff > 0:
-                    insights.append(f"📉 **Spending Alert:** Out-of-pocket expenses increased by **Rs. {exp_diff:,.0f}** compared to last month.")
-                elif exp_diff < 0:
-                    insights.append(f"📈 **Excellent Budgeting:** You reduced your manual expenses by **Rs. {abs(exp_diff):,.0f}**!")
+                if "ai_insights_cache" not in st.session_state:
+                    st.session_state["ai_insights_cache"] = {}
                     
-            # 4. Savings Master Check
-            if 'savings_rate' in locals():
-                if savings_rate >= 30:
-                    insights.append("⭐ **Savings Master:** You saved over 30% of your take-home pay, hitting the gold standard for financial growth.")
-                elif savings_rate < 10:
-                    insights.append("🔔 **Budget Warning:** Your savings rate dropped below 10%. Consider reviewing your top expense categories.")
-                    
-            # 5. Anomaly Detection
-            unmapped = month_data['Total Deductions'] - (month_data['Income Tax'] + month_data['PF Deduction'] + month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction'] + month_data['EOBI'])
-            if unmapped > 100:
-                insights.append(f"❓ **Anomaly Detected:** Found **Rs. {unmapped:,.0f}** in unmapped, hidden deductions. Please review your official PDF payslip.")
-                
-        else:
-            insights.append("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
-
-        # Render the insights inside a clean expander box
-        with st.expander("Click to view Auto-Generated Insights", expanded=True):
-            for insight in insights:
-                st.markdown(insight)
+                if cache_key in st.session_state["ai_insights_cache"]:
+                    # Show the memorized AI response instantly
+                    st.markdown(st.session_state["ai_insights_cache"][cache_key])
+                else:
+                    st.markdown("Want a professional AI analysis of your Month-over-Month cash flow?")
+                    if st.button(f"✨ Generate AI Insights for {month_data['Month']}"):
+                        with st.spinner(f"AI is analyzing {month_data['Month']} vs {prev_month_data['Month']}..."):
+                            try:
+                                client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+                                
+                                # --- Smart Model Selector ---
+                                active_models = [m.id for m in client.models.list().data]
+                                preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
+                                chosen_model = next((model for model in preferred_models if model in active_models), None)
+                                if not chosen_model:
+                                    valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
+                                    chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                                    
+                                expense_context_curr = total_spent if 'total_spent' in locals() else 0
+                                expense_context_prev = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
+                                
+                                prompt = f"""
+                                Act as a corporate financial advisor for an Executive Chemical Engineer at AgriTech Ltd. 
+                                Analyze the Month-over-Month changes between {selected_month} and {prev_month_data['Month']}:
+                                
+                                [CURRENT MONTH: {selected_month}]
+                                - Gross Pay: Rs. {month_data['Gross Pay']:,.0f}
+                                - Net Pay (Take Home): Rs. {month_data['Net Pay']:,.0f}
+                                - Income Tax: Rs. {month_data['Income Tax']:,.0f}
+                                - Site Living (Mess+Club): Rs. {month_data['Mess Bill'] + month_data['Club Bill']:,.0f}
+                                - Out of Pocket Expenses: Rs. {expense_context_curr:,.0f}
+                                
+                                [PREVIOUS MONTH: {prev_month_data['Month']}]
+                                - Gross Pay: Rs. {prev_month_data['Gross Pay']:,.0f}
+                                - Net Pay (Take Home): Rs. {prev_month_data['Net Pay']:,.0f}
+                                - Income Tax: Rs. {prev_month_data['Income Tax']:,.0f}
+                                - Site Living (Mess+Club): Rs. {prev_month_data['Mess Bill'] + prev_month_data['Club Bill']:,.0f}
+                                - Out of Pocket Expenses: Rs. {expense_context_prev:,.0f}
+                                
+                                Write 3 to 4 concise, punchy bullet points using emojis. 
+                                Highlight key changes in income, tax, spending habits, and overall savings efficiency.
+                                Explain what these differences mean practically.
+                                Do NOT write an introduction or conclusion. Output ONLY the bullet points.
+                                """
+                                
+                                completion = client.chat.completions.create(
+                                    model=chosen_model,
+                                    messages=[{"role": "user", "content": prompt}],
+                                    temperature=0.3, # Keep logic tight and analytical
+                                    max_tokens=400
+                                )
+                                
+                                result = completion.choices[0].message.content
+                                result += f"\n\n*(Powered by {chosen_model})*"
+                                
+                                # Save to memory and refresh the UI so it displays smoothly
+                                st.session_state["ai_insights_cache"][cache_key] = result
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"Groq API Error: {str(e)}")
+            else:
+                st.info("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
                 
         st.markdown("<br>", unsafe_allow_html=True)
         # --- SECTION 3: TABS ---
