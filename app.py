@@ -179,7 +179,7 @@ def main():
             
         st.sidebar.markdown("### ⚙️ Financial Engine")
         
-        # FEATURE 2: Sync Button Renamed to "Refresh" (Fixed logic so it doesn't log you out)
+        # FEATURE 2: Sync Button Renamed to "Refresh"
         if st.sidebar.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
@@ -354,7 +354,7 @@ def main():
 
         st.divider()
 
-        # --- TABS (AI Chat Assistant Removed from here) ---
+        # --- TABS ---
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
@@ -375,7 +375,7 @@ def main():
             sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
             sankey_other = max(0, month_data['Total Deductions'] - (sankey_tax + sankey_pf + sankey_site))
             sankey_net = month_data['Net Pay']
-            sankey_exp = min(total_spent, sankey_net) # Prevent overflow visually
+            sankey_exp = min(total_spent, sankey_net) 
             sankey_sav = max(0, sankey_net - sankey_exp)
             
             fig_sankey = go.Figure(data=[go.Sankey(
@@ -409,7 +409,6 @@ def main():
             y_list.append(wf_net)
             measure_list.append("total")
             
-            # Break down expenses individually instead of collectively
             wf_savings = wf_net
             if not curr_exp.empty:
                 cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
@@ -615,10 +614,10 @@ def main():
                 st.metric("Projected Net Take-Home", f"Rs. {sim_net:,.0f}", f"{'+' if diff_net >=0 else ''}{diff_net:,.0f} from current")
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
 
-        # --- FEATURE 6: Floating AI Chat Assistant (Circular Robot Icon) ---
+        # --- FEATURE 6: Floating AI Chat Assistant (Perfect Blue Circle) ---
         st.markdown("""
         <style>
-        /* Position the popover in the bottom right corner */
+        /* 1. Position the popover in the bottom right corner */
         div[data-testid="stPopover"] {
             position: fixed;
             bottom: 40px;
@@ -626,32 +625,44 @@ def main():
             z-index: 999999;
         }
         
-        /* Force the button to be a perfect circle */
+        /* 2. FORCE the button to be a perfect circle and override Streamlit's hidden min-width */
         div[data-testid="stPopover"] > button {
-            background: linear-gradient(135deg, #4285F4, #9B51E0, #D946EF);
+            background-color: #0b57d0 !important; /* Solid ADNOC Blue */
+            background-image: none !important;
             border-radius: 50% !important;
-            width: 75px !important;
-            height: 75px !important;
+            width: 70px !important;
+            height: 70px !important;
+            min-width: 70px !important; /* CRITICAL: Breaks Streamlit's default bar shape */
+            min-height: 70px !important;
             padding: 0 !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: none;
-            box-shadow: 0px 8px 25px rgba(0,0,0,0.5);
-            transition: transform 0.3s ease-in-out;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border: none !important;
+            box-shadow: 0px 8px 16px rgba(0,0,0,0.3) !important;
+            transition: transform 0.2s ease-in-out !important;
         }
         
-        /* Add a nice hover pop effect */
+        /* Hover Effect */
         div[data-testid="stPopover"] > button:hover {
-            transform: scale(1.15) rotate(5deg);
+            transform: scale(1.1) !important;
+            background-color: #0842a0 !important; 
         }
         
-        /* Make the robot emoji perfectly centered and large */
+        /* 3. Center the Robot emoji inside the circle */
         div[data-testid="stPopover"] > button p {
-            font-size: 38px !important;
+            font-size: 35px !important;
             margin: 0 !important;
             padding: 0 !important;
             line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        
+        /* 4. CRITICAL: Physically delete Streamlit's hidden dropdown arrow */
+        div[data-testid="stPopover"] > button svg {
+            display: none !important;
         }
         </style>
         """, unsafe_allow_html=True)
