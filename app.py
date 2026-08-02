@@ -5,13 +5,20 @@ import plotly.graph_objects as go
 from groq import Groq
 import datetime
 import streamlit.components.v1 as components
+import io
 
-# Attempt to import PDF generator
+# Optional libraries for file parsing
 try:
     from fpdf import FPDF
     FPDF_AVAILABLE = True
 except ImportError:
     FPDF_AVAILABLE = False
+
+try:
+    import PyPDF2
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
 
 # --- Import our background functions ---
 from data_loader import fetch_salary_data, fetch_expense_data
@@ -28,10 +35,8 @@ def check_password():
     if st.session_state["password_correct"]:
         return True
 
-    # --- FEATURE 5: iPhone Style On-Screen Keyboard ---
     st.markdown("<h2 style='text-align: center; font-family: sans-serif;'>🔒 Enter Passcode</h2>", unsafe_allow_html=True)
     
-    # Display hidden PIN dots
     pin_len = len(st.session_state["pin_input"])
     target_len = len(str(st.secrets["DASHBOARD_PASSWORD"]))
     pin_display = "● " * pin_len + "○ " * max(0, (target_len - pin_len))
@@ -49,7 +54,6 @@ def check_password():
     def pin_backspace():
         st.session_state["pin_input"] = st.session_state["pin_input"][:-1]
 
-    # Keypad Grid
     st.markdown("""
         <style>
         div[data-testid="stButton"] button { height: 60px; font-size: 24px; border-radius: 30px; }
@@ -75,7 +79,6 @@ def check_password():
 
     st.markdown("<br><hr>", unsafe_allow_html=True)
     
-    # Fallback alphanumeric login
     def text_pwd():
         if st.session_state["text_pwd_input"] == str(st.secrets["DASHBOARD_PASSWORD"]):
             st.session_state["password_correct"] = True
@@ -92,13 +95,10 @@ def check_password():
 def generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_rate):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Title
     pdf.set_font("Arial", "B", 16)
     pdf.cell(200, 10, txt=f"AGL Executive Financial Report: {month_data['Month']}", ln=True, align="C")
     pdf.ln(5)
     
-    # Section 1: Executive Summary & KPIs
     pdf.set_font("Arial", "B", 12)
     pdf.cell(200, 10, txt="1. Executive Summary & KPIs", ln=True)
     pdf.set_font("Arial", "", 10)
@@ -109,7 +109,6 @@ def generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_r
     pdf.cell(200, 8, txt=f"Financial Health Score: {health_score} / 100", ln=True)
     pdf.ln(5)
     
-    # Section 2: Tax & PF Tracking
     pdf.set_font("Arial", "B", 12)
     pdf.cell(200, 10, txt="2. Tax & PF Tracking", ln=True)
     pdf.set_font("Arial", "", 10)
@@ -118,7 +117,6 @@ def generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_r
     pdf.cell(200, 8, txt=f"Provident Fund (Total Accumulation): Rs. {month_data['PF Employee Bal'] + month_data['PF Company Bal']:,.0f}", ln=True)
     pdf.ln(5)
     
-    # Section 3: Salary Breakdown
     pdf.set_font("Arial", "B", 12)
     pdf.cell(200, 10, txt="3. Salary Components", ln=True)
     pdf.set_font("Arial", "", 10)
@@ -127,7 +125,6 @@ def generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_r
     pdf.cell(200, 8, txt=f"House Rent Allowance: Rs. {month_data['House Rent Allowance']:,.0f}", ln=True)
     pdf.ln(5)
     
-    # Section 4: Site Living
     pdf.set_font("Arial", "B", 12)
     pdf.cell(200, 10, txt="4. Site Living Deductions", ln=True)
     pdf.set_font("Arial", "", 10)
@@ -161,6 +158,7 @@ def render_executive_kpi(df):
 
 def main():
     if check_password():
+        st.markdown("<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}</style>", unsafe_allow_html=True)
         st.markdown("<h1>🏭 AgriTech Ltd <span style='font-size:24px; color:gray;'>| Executive Compensation Portal</span></h1>", unsafe_allow_html=True)
         
         with st.spinner("Synchronizing securely with Gmail..."):
@@ -173,19 +171,16 @@ def main():
         render_executive_kpi(df)
 
         # --- SIDEBAR CONTROLS ---
-        # FEATURE 4: Logout Button
         if st.sidebar.button("🚪 Logout", use_container_width=True):
             st.session_state["password_correct"] = False
             st.rerun()
             
         st.sidebar.markdown("### ⚙️ Financial Engine")
         
-        # FEATURE 2: Sync Button Renamed to "Refresh"
         if st.sidebar.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 
-        # FEATURE 3: Search Payslip instead of dropdowns
         st.sidebar.markdown("### 🔍 Search Payslip")
         all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
         selected_month = st.sidebar.selectbox("Type to search (e.g. APR, 2025, Bonus)", options=all_months_sorted, index=0)
@@ -194,7 +189,6 @@ def main():
         selected_fy = month_data['FY']
         df_fy = df[df['FY'] == selected_fy]
 
-        # FEATURE 9: Advanced Filters Section
         with st.sidebar.expander("🛠️ Advanced Filters", expanded=False):
             st.date_input("Custom Date Range", [])
             st.selectbox("Quarter", ["All", "Q1", "Q2", "Q3", "Q4"])
@@ -204,7 +198,7 @@ def main():
             st.caption("Filters apply to raw data export and aggregated timeline views.")
 
         st.sidebar.markdown("---")
-        st.sidebar.caption("✅ Version 4.0: Live Sync & AI Chat")
+        st.sidebar.caption("✅ Version 4.0: Live Sync & AI Widget")
 
         prev_year_month = df[(df['Month'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
         current_index = df[df['Date'] == month_data['Date']].index[0]
@@ -280,7 +274,6 @@ def main():
             prev_target_month = str(prev_exp_month_name).strip().upper() if prev_exp_month_name else None
             prev_exp = df_exp[df_exp['Salary Month'] == prev_target_month] if prev_target_month else pd.DataFrame()
             
-            # --- FEATURE 8: Generate Monthly PDF Report ---
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
@@ -319,7 +312,6 @@ def main():
                 ex_cols[2].metric("True Savings Rate", f"{savings_rate:.1f}%")
                 ex_cols[3].metric("Financial Health", f"{health_score} / 100", stars, delta_color="off")
                 
-                # PDF Download Button
                 with ex_cols[4]:
                     if FPDF_AVAILABLE:
                         pdf_bytes = generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_rate)
@@ -327,9 +319,7 @@ def main():
                     else:
                         st.button("📑 Generate Report", disabled=True, help="Add 'fpdf' to requirements.txt to enable.")
                 
-                # --- FEATURE 7: Expense Categories Ranking (Replaces Pie Chart) ---
                 st.markdown("###### 📊 Expense Ranking & MoM Change")
-                
                 top_10 = category_sums.sort_values(ascending=False).head(10)
                 mom_diffs = {}
                 for cat, val in category_sums.items():
@@ -370,7 +360,6 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # --- FEATURE 10: Sankey Diagram ---
             sankey_tax = month_data['Income Tax']
             sankey_pf = month_data['PF Deduction']
             sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
@@ -386,7 +375,6 @@ def main():
             fig_sankey.update_layout(title_text="Cash Flow Sankey Diagram", height=350, margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig_sankey, use_container_width=True)
             
-            # --- FEATURE 1: Waterfall Breakdown of Individual Expenses ---
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -616,23 +604,25 @@ def main():
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
 
 
-        # --- FEATURE 6: FOOLPROOF JAVASCRIPT FLOATING AI WIDGET ---
+        # ===================================================================================================
+        # --- FEATURE 6: FOOLPROOF JAVASCRIPT FLOATING AI WIDGET (ADNOC STYLE) ---
+        # ===================================================================================================
+
         st.markdown("<style>div[data-testid='stPopover'] { display: none; }</style>", unsafe_allow_html=True)
         
+        # 1. Inject DOM JS Hack to force the perfect circular button natively in the browser
         components.html("""
         <script>
-        // Use an interval to continuously hunt for the button, bypassing Streamlit's lazy loading
         const huntForButton = setInterval(() => {
             const doc = window.parent.document;
             const buttons = doc.querySelectorAll('button');
             
             buttons.forEach(btn => {
-                // If it's the Robot Button
                 if (btn.innerText.includes('🤖')) {
-                    clearInterval(huntForButton); // Stop hunting once found
+                    clearInterval(huntForButton);
                     
-                    // 1. Force the button to be a solid blue circle
-                    btn.style.setProperty('background-color', '#0b57d0', 'important');
+                    // Force Circle Button (Overrides Streamlit's minimum width/bar shape)
+                    btn.style.setProperty('background-color', '#0066FF', 'important');
                     btn.style.setProperty('border-radius', '50%', 'important');
                     btn.style.setProperty('width', '70px', 'important');
                     btn.style.setProperty('height', '70px', 'important');
@@ -642,90 +632,219 @@ def main():
                     btn.style.setProperty('display', 'flex', 'important');
                     btn.style.setProperty('align-items', 'center', 'important');
                     btn.style.setProperty('justify-content', 'center', 'important');
-                    btn.style.setProperty('box-shadow', '0px 8px 20px rgba(0,0,0,0.5)', 'important');
+                    btn.style.setProperty('box-shadow', '0px 8px 25px rgba(0, 102, 255, 0.4)', 'important');
                     btn.style.setProperty('border', 'none', 'important');
-                    btn.style.setProperty('transition', 'transform 0.2s', 'important');
+                    btn.style.setProperty('transition', 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', 'important');
                     
-                    // Add hover pop effect
-                    btn.onmouseover = function() { this.style.transform = "scale(1.1)"; }
-                    btn.onmouseout = function() { this.style.transform = "scale(1.0)"; }
+                    // Add Tooltip natively
+                    btn.setAttribute('title', 'Ask AI');
                     
-                    // 2. Erase the annoying Streamlit dropdown arrow SVG
+                    // Hover effects
+                    btn.onmouseover = function() { 
+                        this.style.setProperty('transform', 'scale(1.1) translateY(-5px)', 'important');
+                        this.style.setProperty('box-shadow', '0px 12px 30px rgba(0, 102, 255, 0.6)', 'important');
+                    }
+                    btn.onmouseout = function() { 
+                        this.style.setProperty('transform', 'scale(1.0) translateY(0)', 'important');
+                        this.style.setProperty('box-shadow', '0px 8px 25px rgba(0, 102, 255, 0.4)', 'important');
+                    }
+                    
+                    // Erase Streamlit Dropdown Arrow
                     const svg = btn.querySelector('svg');
                     if (svg) svg.style.setProperty('display', 'none', 'important');
                     
-                    // 3. Make the Robot text perfectly centered and large
+                    // Center the Robot Text
                     const p = btn.querySelector('p');
                     if (p) {
-                        p.style.setProperty('font-size', '38px', 'important');
+                        p.style.setProperty('font-size', '35px', 'important');
                         p.style.setProperty('margin', '0', 'important');
+                        p.style.setProperty('color', 'white', 'important');
                     }
                     
-                    // 4. Rip the container out of the layout and float it perfectly in the bottom right
+                    // Float the Container
                     let container = btn.closest('div[data-testid="stPopover"]');
                     if (container) {
                         container.style.setProperty('display', 'block', 'important');
                         container.style.setProperty('position', 'fixed', 'important');
-                        container.style.setProperty('bottom', '40px', 'important');
-                        container.style.setProperty('right', '40px', 'important');
+                        container.style.setProperty('bottom', '30px', 'important');
+                        container.style.setProperty('right', '30px', 'important');
                         container.style.setProperty('z-index', '999999', 'important');
-                        container.style.setProperty('width', '70px', 'important');
-                        container.style.setProperty('height', '70px', 'important');
                     }
                 }
             });
-        }, 500); // Check every half second until it finds it
+        }, 100);
         </script>
         """, height=0, width=0)
 
-        with st.popover("🤖"):
-            st.markdown("### ✨ Gemini Financial Assistant")
-            st.caption(f"Context: **{month_data['Month']}** ({selected_fy})")
+        # 2. Add CSS constraints for the Popup Body and Chat Bubbles
+        st.markdown("""
+        <style>
+        /* Force Popup placement and size */
+        div[data-testid="stPopoverBody"] {
+            width: 380px !important;
+            min-width: 380px !important;
+            max-width: 95vw !important;
+            height: 550px !important;
+            min-height: 550px !important;
+            border-radius: 20px !important;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2) !important;
+            border: 1px solid rgba(0,0,0,0.05) !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: white !important;
             
-            if "groq_chat_history" not in st.session_state:
-                st.session_state["groq_chat_history"] = []
+            position: fixed !important;
+            bottom: 110px !important;
+            right: 30px !important;
+            top: auto !important;
+            left: auto !important;
+            transform: none !important;
+        }
 
-            if len(st.session_state["groq_chat_history"]) == 0:
-                if st.button("📉 Net Pay Analysis", use_container_width=True):
-                    prompt = "Explain why my Net Pay is what it is this month."
-                    st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
+        /* Hide avatars */
+        div[data-testid="stChatMessage"] [data-testid="chatAvatarIcon-user"], 
+        div[data-testid="stChatMessage"] [data-testid="chatAvatarIcon-assistant"] {
+            display: none !important;
+        }
+        
+        /* Base bubble */
+        div[data-testid="stChatMessage"] {
+            padding: 10px 14px !important;
+            margin-bottom: 15px !important;
+            width: fit-content !important;
+            max-width: 85% !important;
+            background-color: transparent !important;
+            border: none !important;
+        }
+        
+        /* User Bubble (Right) */
+        div[data-testid="stChatMessage"]:has(.is-user) {
+            background-color: #0066FF !important;
+            border-radius: 18px 18px 4px 18px !important;
+            margin-left: auto !important;
+            margin-right: 15px !important;
+        }
+        div[data-testid="stChatMessage"]:has(.is-user) * { color: white !important; }
+        
+        /* AI Bubble (Left) */
+        div[data-testid="stChatMessage"]:has(.is-ai) {
+            background-color: #F0F2F5 !important;
+            border-radius: 18px 18px 18px 4px !important;
+            margin-right: auto !important;
+            margin-left: 15px !important;
+        }
+        div[data-testid="stChatMessage"]:has(.is-ai) * { color: #1a1a1a !important; }
+
+        .chat-time { font-size: 10px; opacity: 0.7; display: block; margin-top: 5px; text-align: right; }
+        .bot-header { background: linear-gradient(135deg, #0066FF, #0047CC); padding: 20px; border-radius: 20px 20px 0 0; }
+        .bot-header h3 { color: white !important; margin: 0; font-size: 20px; font-weight: 600; }
+        .bot-header p { color: rgba(255,255,255,0.9) !important; margin: 5px 0 0 0; font-size: 12px; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        with st.popover("🤖"):
+            st.markdown("""
+            <div class="bot-header">
+                <h3>🤖 AI Assistant</h3>
+                <p>Ask anything about your salary, HR policies, leaves, expenses, or company info.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            tool_col1, tool_col2, tool_col3 = st.columns([1,1,1])
+            with tool_col1:
+                if st.button("🔄 Clear", key="clear_chat", use_container_width=True):
+                    st.session_state["widget_chat_history"] = []
                     st.rerun()
+            with tool_col2:
+                with st.popover("📎 Attach"):
+                    uploaded_file = st.file_uploader("Upload PDF, CSV, Excel", type=["pdf", "csv", "xlsx"])
+            with tool_col3:
+                chat_export = ""
+                if "widget_chat_history" in st.session_state:
+                    for m in st.session_state["widget_chat_history"]:
+                        chat_export += f"[{m['timestamp']}] {m['role'].upper()}:\n{m['content']}\n\n"
+                st.download_button("📥 Save", data=chat_export, file_name="AGL_Chat_Log.txt", mime="text/plain", use_container_width=True)
 
-            for message in st.session_state["groq_chat_history"]:
-                avatar = "👤" if message["role"] == "user" else "✨"
-                with st.chat_message(message["role"], avatar=avatar):
-                    st.markdown(message["content"])
+            if "widget_chat_history" not in st.session_state:
+                st.session_state["widget_chat_history"] = []
 
-            user_input = st.chat_input("Ask anything about your salary or expenses...")
-            if user_input:
-                st.session_state["groq_chat_history"].append({"role": "user", "content": user_input})
-                
-                expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent:,.0f}" if 'total_spent' in locals() else "No manual expenses logged this month."
-                system_context = f"""
-                You are Gemini, an elite Executive AI Financial Advisor for Waqar Ahmed Tunio at AgriTech Ltd.
-                Current Context for {month_data['Month']}: Gross Pay: Rs. {month_data['Gross Pay']:,.0f}, Net Pay: Rs. {month_data['Net Pay']:,.0f}.
-                Total Deductions: Rs. {month_data['Total Deductions']:,.0f}. 
-                {expense_context}
-                """
+            chat_container = st.container(height=320)
+            
+            with chat_container:
+                suggested_prompt = None
+                if len(st.session_state["widget_chat_history"]) == 0:
+                    st.markdown("<br><p style='text-align:center; color:gray; font-size:12px;'>Suggested Questions</p>", unsafe_allow_html=True)
+                    s_col1, s_col2 = st.columns(2)
+                    if s_col1.button("💰 Salary Summary", use_container_width=True): suggested_prompt = "Give me a quick summary of my salary this month."
+                    if s_col2.button("📈 Analyze Expenses", use_container_width=True): suggested_prompt = "Analyze my logged expenses for this month."
+                    if s_col1.button("🏖 Leave Balance", use_container_width=True): suggested_prompt = "What is my current leave balance?"
+                    if s_col2.button("🏭 Company Policies", use_container_width=True): suggested_prompt = "What are the standard HR policies for Shift Engineers?"
 
-                messages_for_api = [{"role": "system", "content": system_context}]
-                messages_for_api.extend(st.session_state["groq_chat_history"])
+                for message in st.session_state["widget_chat_history"]:
+                    with st.chat_message(message["role"]):
+                        role_class = "is-user" if message["role"] == "user" else "is-ai"
+                        st.markdown(f"<div class='{role_class}'></div>", unsafe_allow_html=True)
+                        st.markdown(message["content"])
+                        st.markdown(f"<span class='chat-time'>{message['timestamp']}</span>", unsafe_allow_html=True)
 
-                try:
-                    client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                    active_models = [m.id for m in client.models.list().data]
-                    chosen_model = next((model for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if model in active_models), active_models[0])
-                    
-                    completion = client.chat.completions.create(model=chosen_model, messages=messages_for_api, temperature=0.4, max_tokens=600)
-                    response = completion.choices[0].message.content
-                    st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"AI Error: {str(e)}")
-                    
-            if st.button("🗑️ Clear Chat", use_container_width=True):
-                st.session_state["groq_chat_history"] = []
+            user_input = st.chat_input("Ask me anything...")
+            prompt = suggested_prompt or user_input
+
+            if prompt:
+                curr_time = datetime.datetime.now().strftime("%I:%M %p")
+                st.session_state["widget_chat_history"].append({"role": "user", "content": prompt, "timestamp": curr_time})
                 st.rerun()
+
+            if len(st.session_state["widget_chat_history"]) > 0 and st.session_state["widget_chat_history"][-1]["role"] == "user":
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        st.markdown("<div class='is-ai'></div>", unsafe_allow_html=True)
+                        with st.spinner("Thinking..."):
+                            try:
+                                file_context = ""
+                                if uploaded_file is not None:
+                                    file_context = "\n\n[USER UPLOADED FILE DATA]\n"
+                                    if uploaded_file.name.endswith('.csv'):
+                                        df_upload = pd.read_csv(uploaded_file)
+                                        file_context += df_upload.to_string(max_rows=50)
+                                    elif uploaded_file.name.endswith('.xlsx'):
+                                        df_upload = pd.read_excel(uploaded_file)
+                                        file_context += df_upload.to_string(max_rows=50)
+                                    elif uploaded_file.name.endswith('.pdf') and PYPDF_AVAILABLE:
+                                        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+                                        for i in range(min(3, len(pdf_reader.pages))): 
+                                            file_context += pdf_reader.pages[i].extract_text()
+                                    else:
+                                        file_context += f"Filename: {uploaded_file.name}. (Content extraction requires specific python libraries)."
+                                
+                                expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent:,.0f}" if 'total_spent' in locals() else "No manual expenses logged this month."
+                                system_context = f"""
+                                You are Gemini, an elite Executive AI Financial Advisor for Waqar Ahmed Tunio at AgriTech Ltd.
+                                Current Context for {month_data['Month']}: Gross Pay: Rs. {month_data['Gross Pay']:,.0f}, Net Pay: Rs. {month_data['Net Pay']:,.0f}.
+                                Total Deductions: Rs. {month_data['Total Deductions']:,.0f}. 
+                                Leave Balance: {month_data['Leave Balance']} days.
+                                {expense_context}
+                                {file_context}
+                                
+                                Use Markdown. Use bullet points and bold text for numbers.
+                                """
+
+                                client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+                                active_models = [m.id for m in client.models.list().data]
+                                chosen_model = next((model for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if model in active_models), active_models[0])
+                                
+                                api_messages = [{"role": "system", "content": system_context}]
+                                for msg in st.session_state["widget_chat_history"]:
+                                    api_messages.append({"role": msg["role"], "content": msg["content"]})
+                                
+                                completion = client.chat.completions.create(model=chosen_model, messages=api_messages, temperature=0.4, max_tokens=600)
+                                response_text = completion.choices[0].message.content
+                                
+                                st.session_state["widget_chat_history"].append({"role": "assistant", "content": response_text, "timestamp": datetime.datetime.now().strftime("%I:%M %p")})
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"AI Error: {str(e)}")
 
 if __name__ == '__main__':
     main()
