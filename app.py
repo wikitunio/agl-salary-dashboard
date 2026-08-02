@@ -4,7 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from groq import Groq
 import datetime
-import streamlit.components.v1 as components
 
 # Attempt to import PDF generator
 try:
@@ -173,19 +172,16 @@ def main():
         render_executive_kpi(df)
 
         # --- SIDEBAR CONTROLS ---
-        # FEATURE 4: Logout Button
         if st.sidebar.button("🚪 Logout", use_container_width=True):
             st.session_state["password_correct"] = False
             st.rerun()
             
         st.sidebar.markdown("### ⚙️ Financial Engine")
         
-        # FEATURE 2: Sync Button Renamed to "Refresh"
         if st.sidebar.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 
-        # FEATURE 3: Search Payslip instead of dropdowns
         st.sidebar.markdown("### 🔍 Search Payslip")
         all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
         selected_month = st.sidebar.selectbox("Type to search (e.g. APR, 2025, Bonus)", options=all_months_sorted, index=0)
@@ -194,7 +190,6 @@ def main():
         selected_fy = month_data['FY']
         df_fy = df[df['FY'] == selected_fy]
 
-        # FEATURE 9: Advanced Filters Section
         with st.sidebar.expander("🛠️ Advanced Filters", expanded=False):
             st.date_input("Custom Date Range", [])
             st.selectbox("Quarter", ["All", "Q1", "Q2", "Q3", "Q4"])
@@ -280,7 +275,6 @@ def main():
             prev_target_month = str(prev_exp_month_name).strip().upper() if prev_exp_month_name else None
             prev_exp = df_exp[df_exp['Salary Month'] == prev_target_month] if prev_target_month else pd.DataFrame()
             
-            # --- FEATURE 8: Generate Monthly PDF Report ---
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
@@ -319,7 +313,6 @@ def main():
                 ex_cols[2].metric("True Savings Rate", f"{savings_rate:.1f}%")
                 ex_cols[3].metric("Financial Health", f"{health_score} / 100", stars, delta_color="off")
                 
-                # PDF Download Button
                 with ex_cols[4]:
                     if FPDF_AVAILABLE:
                         pdf_bytes = generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_rate)
@@ -327,7 +320,6 @@ def main():
                     else:
                         st.button("📑 Generate Report", disabled=True, help="Add 'fpdf' to requirements.txt to enable.")
                 
-                # --- FEATURE 7: Expense Categories Ranking (Replaces Pie Chart) ---
                 st.markdown("###### 📊 Expense Ranking & MoM Change")
                 
                 top_10 = category_sums.sort_values(ascending=False).head(10)
@@ -370,7 +362,6 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # --- FEATURE 10: Sankey Diagram ---
             sankey_tax = month_data['Income Tax']
             sankey_pf = month_data['PF Deduction']
             sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
@@ -386,7 +377,6 @@ def main():
             fig_sankey.update_layout(title_text="Cash Flow Sankey Diagram", height=350, margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig_sankey, use_container_width=True)
             
-            # --- FEATURE 1: Waterfall Breakdown of Individual Expenses ---
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -616,69 +606,88 @@ def main():
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
 
 
-        # --- FEATURE 6: FOOLPROOF JAVASCRIPT FLOATING AI WIDGET ---
-        st.markdown("<style>div[data-testid='stPopover'] { display: none; }</style>", unsafe_allow_html=True)
-        
-        components.html("""
-        <script>
-        // Use an interval to continuously hunt for the button, bypassing Streamlit's lazy loading
-        const huntForButton = setInterval(() => {
-            const doc = window.parent.document;
-            const buttons = doc.querySelectorAll('button');
-            
-            buttons.forEach(btn => {
-                // If it's the Robot Button
-                if (btn.innerText.includes('🤖')) {
-                    clearInterval(huntForButton); // Stop hunting once found
-                    
-                    // 1. Force the button to be a solid blue circle
-                    btn.style.setProperty('background-color', '#0b57d0', 'important');
-                    btn.style.setProperty('border-radius', '50%', 'important');
-                    btn.style.setProperty('width', '70px', 'important');
-                    btn.style.setProperty('height', '70px', 'important');
-                    btn.style.setProperty('min-width', '70px', 'important');
-                    btn.style.setProperty('min-height', '70px', 'important');
-                    btn.style.setProperty('padding', '0', 'important');
-                    btn.style.setProperty('display', 'flex', 'important');
-                    btn.style.setProperty('align-items', 'center', 'important');
-                    btn.style.setProperty('justify-content', 'center', 'important');
-                    btn.style.setProperty('box-shadow', '0px 8px 20px rgba(0,0,0,0.5)', 'important');
-                    btn.style.setProperty('border', 'none', 'important');
-                    btn.style.setProperty('transition', 'transform 0.2s', 'important');
-                    
-                    // Add hover pop effect
-                    btn.onmouseover = function() { this.style.transform = "scale(1.1)"; }
-                    btn.onmouseout = function() { this.style.transform = "scale(1.0)"; }
-                    
-                    // 2. Erase the annoying Streamlit dropdown arrow SVG
-                    const svg = btn.querySelector('svg');
-                    if (svg) svg.style.setProperty('display', 'none', 'important');
-                    
-                    // 3. Make the Robot text perfectly centered and large
-                    const p = btn.querySelector('p');
-                    if (p) {
-                        p.style.setProperty('font-size', '38px', 'important');
-                        p.style.setProperty('margin', '0', 'important');
-                    }
-                    
-                    // 4. Rip the container out of the layout and float it perfectly in the bottom right
-                    let container = btn.closest('div[data-testid="stPopover"]');
-                    if (container) {
-                        container.style.setProperty('display', 'block', 'important');
-                        container.style.setProperty('position', 'fixed', 'important');
-                        container.style.setProperty('bottom', '40px', 'important');
-                        container.style.setProperty('right', '40px', 'important');
-                        container.style.setProperty('z-index', '999999', 'important');
-                        container.style.setProperty('width', '70px', 'important');
-                        container.style.setProperty('height', '70px', 'important');
-                    }
-                }
-            });
-        }, 500); // Check every half second until it finds it
-        </script>
-        """, height=0, width=0)
+        # ===================================================================================================
+        # --- FEATURE 6: PURE CSS FLOATING AI WIDGET (NO JAVASCRIPT BUGS) ---
+        # ===================================================================================================
+        st.markdown("""
+        <style>
+        /* 1. Float the entire container to the bottom right */
+        div[data-testid="stPopover"] {
+            position: fixed !important;
+            bottom: 30px !important;
+            right: 30px !important;
+            z-index: 999999 !important;
+        }
 
-        with st.popover("🤖"):
+        /* 2. Shape the button into a perfect ADNOC Blue circle */
+        div[data-testid="stPopover"] > button {
+            background-color: #0066FF !important;
+            color: transparent !important;
+            border-radius: 50% !important;
+            width: 70px !important;
+            height: 70px !important;
+            min-width: 70px !important; /* Forces the circle shape */
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: 0px 8px 20px rgba(0, 102, 255, 0.4) !important;
+            transition: all 0.2s ease-in-out !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        /* 3. Hide Streamlit's default text and dropdown arrow entirely */
+        div[data-testid="stPopover"] > button p { display: none !important; }
+        div[data-testid="stPopover"] > button svg { display: none !important; }
+
+        /* 4. Inject a crisp Robot emoji perfectly in the center */
+        div[data-testid="stPopover"] > button::before {
+            content: "🤖";
+            font-size: 34px !important;
+            display: block !important;
+            position: absolute !important;
+        }
+
+        /* 5. Tooltip (Ask AI) */
+        div[data-testid="stPopover"] > button::after {
+            content: "Ask AI";
+            position: absolute;
+            top: -40px;
+            background: #1a1a1a;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            white-space: nowrap;
+        }
+
+        /* 6. Hover animations */
+        div[data-testid="stPopover"] > button:hover {
+            transform: scale(1.1) translateY(-4px) !important;
+            box-shadow: 0px 12px 25px rgba(0, 102, 255, 0.6) !important;
+        }
+        div[data-testid="stPopover"] > button:hover::after {
+            opacity: 1;
+        }
+
+        /* 7. Style the Popup Window safely */
+        div[data-testid="stPopoverBody"] {
+            width: 380px !important;
+            min-width: 380px !important;
+            max-width: 90vw !important;
+            height: 550px !important;
+            border-radius: 20px !important;
+            box-shadow: 0px 10px 40px rgba(0,0,0,0.2) !important;
+            padding: 1rem !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        with st.popover("Chat"):
             st.markdown("### ✨ Gemini Financial Assistant")
             st.caption(f"Context: **{month_data['Month']}** ({selected_fy})")
             
