@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from groq import Groq
 import datetime
+import streamlit.components.v1 as components
 
 # Attempt to import PDF generator
 try:
@@ -369,55 +370,80 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # --- FEATURE 10: High-Resolution Sankey Diagram ---
+            # --- FEATURE 10: High-Resolution Dynamic Sankey Diagram ---
             sankey_tax = month_data['Income Tax']
             sankey_pf = month_data['PF Deduction']
             sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
             sankey_other = max(0, month_data['Total Deductions'] - (sankey_tax + sankey_pf + sankey_site))
             sankey_net = month_data['Net Pay']
-            sankey_exp = min(total_spent, sankey_net) 
-            sankey_sav = max(0, sankey_net - sankey_exp)
             sankey_gross = month_data['Gross Pay']
             
-            # High Contrast Labels with Explicit Values
+            # Use single line labels to stop Plotly from blurring the text with HTML shadows
             sankey_labels = [
-                f"Gross Pay<br>Rs. {sankey_gross:,.0f}", 
-                f"Income Tax<br>Rs. {sankey_tax:,.0f}", 
-                f"PF Deduction<br>Rs. {sankey_pf:,.0f}", 
-                f"Site Living<br>Rs. {sankey_site:,.0f}", 
-                f"Other Ded.<br>Rs. {sankey_other:,.0f}", 
-                f"Net Pay<br>Rs. {sankey_net:,.0f}", 
-                f"Expenses<br>Rs. {sankey_exp:,.0f}", 
-                f"Savings<br>Rs. {sankey_sav:,.0f}"
+                f"Gross Pay (Rs. {sankey_gross:,.0f})", 
+                f"Income Tax (Rs. {sankey_tax:,.0f})", 
+                f"PF Deduction (Rs. {sankey_pf:,.0f})", 
+                f"Site Living (Rs. {sankey_site:,.0f})", 
+                f"Other Ded. (Rs. {sankey_other:,.0f})", 
+                f"Net Pay (Rs. {sankey_net:,.0f})"
             ]
             
-            # Modern Color Palette
-            node_colors = ["#1f77b4", "#d62728", "#ff7f0e", "#8c564b", "#7f7f7f", "#2ca02c", "#e377c2", "#17becf"]
-            link_colors = ["rgba(31,119,180,0.3)"] * 5 + ["rgba(44,160,44,0.3)"] * 2
+            node_colors = ["#1f77b4", "#d62728", "#ff7f0e", "#8c564b", "#7f7f7f", "#2ca02c"]
+            source = [0, 0, 0, 0, 0]
+            target = [1, 2, 3, 4, 5]
+            value = [sankey_tax, sankey_pf, sankey_site, sankey_other, sankey_net]
+            link_colors = ["rgba(31,119,180,0.3)"] * 5
             
+            current_idx = 6
+            total_logged_exp = 0
+            
+            # Dynamically pull every category from the Excel sheet into the Sankey
+            if not curr_exp.empty:
+                cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
+                for cat, val in cat_sums.items():
+                    if val > 0:
+                        sankey_labels.append(f"{cat} (Rs. {val:,.0f})")
+                        source.append(5) # Links out of Net Pay
+                        target.append(current_idx)
+                        value.append(val)
+                        node_colors.append("#e377c2") # Expense color
+                        link_colors.append("rgba(44,160,44,0.3)") # Greenish link
+                        total_logged_exp += val
+                        current_idx += 1
+            
+            sankey_sav = max(0, sankey_net - total_logged_exp)
+            sankey_labels.append(f"Savings (Rs. {sankey_sav:,.0f})")
+            source.append(5)
+            target.append(current_idx)
+            value.append(sankey_sav)
+            node_colors.append("#17becf")
+            link_colors.append("rgba(44,160,44,0.3)")
+
             fig_sankey = go.Figure(data=[go.Sankey(
                 arrangement="snap",
                 node = dict(
-                    pad=30, 
-                    thickness=25, 
-                    line=dict(color="rgba(0,0,0,0.5)", width=1), 
+                    pad=25, 
+                    thickness=20, 
+                    line=dict(color="black", width=0.5), 
                     label=sankey_labels,
                     color=node_colors
                 ),
                 link = dict(
-                    source=[0, 0, 0, 0, 0, 5, 5], 
-                    target=[1, 2, 3, 4, 5, 6, 7], 
-                    value=[sankey_tax, sankey_pf, sankey_site, sankey_other, sankey_net, sankey_exp, sankey_sav],
+                    source=source, 
+                    target=target, 
+                    value=value,
                     color=link_colors
                 )
             )])
             
-            # Increased Height & Generous Margins to completely stop blurring and cut-offs
+            # Massive margins and strict fonts entirely prevent blurring and cut-offs
             fig_sankey.update_layout(
-                title_text="Cash Flow Sankey Diagram", 
-                font=dict(size=14, color="black", family="Arial"),
-                height=600, 
-                margin=dict(l=120, r=120, t=50, b=50) 
+                title_text="Cash Flow & Pocket Expenses (Sankey)", 
+                font=dict(size=13, color="black", family="Arial, sans-serif"),
+                height=650, 
+                margin=dict(l=150, r=150, t=50, b=50),
+                plot_bgcolor='white',
+                paper_bgcolor='white'
             )
             st.plotly_chart(fig_sankey, use_container_width=True)
             
