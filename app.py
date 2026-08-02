@@ -179,8 +179,8 @@ def main():
             
         st.sidebar.markdown("### ⚙️ Financial Engine")
         
-        # FEATURE 2: Sync Button Renamed to "Refresh"
-        if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+        # FEATURE 2: Sync Button Renamed to "Refresh" (Fixed logic so it doesn't log you out)
+        if st.sidebar.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 
@@ -615,34 +615,48 @@ def main():
                 st.metric("Projected Net Take-Home", f"Rs. {sim_net:,.0f}", f"{'+' if diff_net >=0 else ''}{diff_net:,.0f} from current")
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
 
-        # --- FEATURE 6: Floating AI Chat Assistant ---
+        # --- FEATURE 6: Floating AI Chat Assistant (Circular Robot Icon) ---
         st.markdown("""
         <style>
+        /* Position the popover in the bottom right corner */
         div[data-testid="stPopover"] {
             position: fixed;
-            bottom: 30px;
-            right: 30px;
+            bottom: 40px;
+            right: 40px;
             z-index: 999999;
         }
+        
+        /* Force the button to be a perfect circle */
         div[data-testid="stPopover"] > button {
             background: linear-gradient(135deg, #4285F4, #9B51E0, #D946EF);
-            color: white;
-            border-radius: 50px;
-            padding: 15px 30px;
-            font-size: 16px;
-            font-weight: bold;
+            border-radius: 50% !important;
+            width: 75px !important;
+            height: 75px !important;
+            padding: 0 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border: none;
-            box-shadow: 0px 8px 20px rgba(0,0,0,0.4);
-            transition: transform 0.2s ease-in-out;
+            box-shadow: 0px 8px 25px rgba(0,0,0,0.5);
+            transition: transform 0.3s ease-in-out;
         }
+        
+        /* Add a nice hover pop effect */
         div[data-testid="stPopover"] > button:hover {
-            transform: scale(1.05);
-            color: white;
+            transform: scale(1.15) rotate(5deg);
+        }
+        
+        /* Make the robot emoji perfectly centered and large */
+        div[data-testid="stPopover"] > button p {
+            font-size: 38px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            line-height: 1 !important;
         }
         </style>
         """, unsafe_allow_html=True)
 
-        with st.popover("💬 Ask AI Assistant"):
+        with st.popover("🤖"):
             st.markdown("### ✨ Gemini Financial Assistant")
             st.caption(f"Context: **{month_data['Month']}** ({selected_fy})")
             
