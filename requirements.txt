@@ -9,3 +9,4 @@ openpyxl
 groq
 google-genai
 duckduckgo-search
+fpdf
