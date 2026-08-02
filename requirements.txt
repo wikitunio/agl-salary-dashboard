@@ -10,3 +10,4 @@ groq
 google-genai
 duckduckgo-search
 fpdf
+pyPDF2
