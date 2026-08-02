@@ -286,7 +286,6 @@ def main():
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
-                # Group by the newly combined Detailed Category
                 category_sums = curr_exp.groupby('Detailed Category')['Amount (PKR)'].sum()
                 total_spent = category_sums.sum()
                 net_pay = month_data['Net Pay']
@@ -375,11 +374,13 @@ def main():
             st.subheader("💧 Salary & Expense Waterfall")
             
             # --- FEATURE 10: High-Resolution Multi-Tier Sankey Diagram ---
+            
+            # CRITICAL CSS INJECTION: 
+            # Removes Plotly's ugly text-shadow for crisp, standard fonts (HTML Style)
             st.markdown("""
             <style>
             .sankey-node text {
                 text-shadow: none !important;
-                font-weight: 500 !important;
             }
             </style>
             """, unsafe_allow_html=True)
@@ -394,45 +395,48 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
-            sankey_labels = [
-                f"Gross Pay<br>Rs. {sankey_gross:,.0f}", 
-                f"Net Pay<br>Rs. {sankey_net:,.0f}"
-            ]
-            node_colors = ["#1f77b4", "#2ca02c"]
+            # Labels have NO NUMBERS in the text string (prevents overlap/stacking)
+            sankey_labels = ["Gross Pay", "Net Pay"]
             
+            # Pastel color palette matching HTML output
+            pastel_colors = ['#8c9eff', '#ff9f9b', '#99e2a2', '#ffc07a', '#ccb0db', '#e2a79d', '#f9c5da', '#d1d1bd', '#e5e59b', '#aee5ef']
+            
+            node_colors = [pastel_colors[0], pastel_colors[2]]
             source = []
             target = []
             value = []
             link_colors = []
             
+            # Uniform, clean gray links
+            gray_link = "rgba(200, 200, 200, 0.5)"
             current_idx = 2
             
-            # 1. Deductions explicitly separated exactly as in payslip
+            # 1. Deductions explicitly separated
             deductions = {
-                "Income Tax": (sankey_tax, "#d62728", "rgba(214, 39, 40, 0.3)"),
-                "PF Deduction": (sankey_pf, "#ff7f0e", "rgba(255, 127, 14, 0.3)"),
-                "Mess Bill": (sankey_mess, "#8c564b", "rgba(140, 86, 75, 0.3)"),
-                "Club Bill": (sankey_club, "#c49c94", "rgba(196, 156, 148, 0.3)"),
-                "Rent Deduction": (sankey_rent, "#9467bd", "rgba(148, 103, 189, 0.3)"),
-                "EOBI": (sankey_eobi, "#c5b0d5", "rgba(197, 176, 213, 0.3)"),
-                "Other Ded.": (sankey_other, "#7f7f7f", "rgba(127, 127, 127, 0.3)")
+                "Income Tax": sankey_tax,
+                "PF Deduction": sankey_pf,
+                "Mess Bill": sankey_mess,
+                "Club Bill": sankey_club,
+                "Rent Deduction": sankey_rent,
+                "EOBI": sankey_eobi,
+                "Other Ded.": sankey_other
             }
             
-            for name, (val, col, lcol) in deductions.items():
+            for i, (name, val) in enumerate(deductions.items()):
                 if val > 0:
-                    sankey_labels.append(f"{name}<br>Rs. {val:,.0f}")
+                    sankey_labels.append(name)
                     source.append(0) # From Gross Pay
                     target.append(current_idx)
                     value.append(val)
-                    node_colors.append(col)
-                    link_colors.append(lcol)
+                    node_colors.append(pastel_colors[(i + 3) % len(pastel_colors)])
+                    link_colors.append(gray_link)
                     current_idx += 1
             
             # 2. Link Gross Pay to Net Pay
             source.append(0)
             target.append(1)
             value.append(sankey_net)
-            link_colors.append("rgba(44, 160, 44, 0.3)")
+            link_colors.append(gray_link)
             
             # 3. Pocket Expenses from Net Pay (MULTI-TIER LOGIC)
             total_logged_exp = 0
@@ -441,16 +445,18 @@ def main():
                 cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum().sort_values(ascending=False)
                 cat_idx_map = {}
                 
+                color_offset = 0
                 for cat, val in cat_sums.items():
                     if val > 0:
-                        sankey_labels.append(f"{cat}<br>Rs. {val:,.0f}")
+                        sankey_labels.append(cat)
                         source.append(1) # From Net Pay
                         target.append(current_idx)
                         value.append(val)
-                        node_colors.append("#e377c2") # Dark Pink
-                        link_colors.append("rgba(227, 119, 194, 0.4)")
+                        node_colors.append(pastel_colors[color_offset % len(pastel_colors)])
+                        link_colors.append(gray_link)
                         cat_idx_map[cat] = current_idx
                         current_idx += 1
+                        color_offset += 1
                         
                 # Tier 2: Sub-Category / Person
                 subcat_sums = curr_exp.groupby(['Category', 'Sub-Category / Person'])['Amount (PKR)'].sum().sort_values(ascending=False)
@@ -458,31 +464,36 @@ def main():
                 for (cat, subcat), val in subcat_sums.items():
                     if val > 0:
                         # Append the Sub-Category Node
-                        sankey_labels.append(f"{subcat}<br>Rs. {val:,.0f}")
+                        sankey_labels.append(subcat)
                         source.append(cat_idx_map[cat]) # Link flows from the Parent Category
                         target.append(current_idx)
                         value.append(val)
-                        node_colors.append("#f7b6d2") # Light Pink
-                        link_colors.append("rgba(247, 182, 210, 0.4)")
+                        node_colors.append(pastel_colors[(color_offset + 1) % len(pastel_colors)])
+                        link_colors.append(gray_link)
                         total_logged_exp += val
                         current_idx += 1
+                        color_offset += 1
                         
             # 4. Savings from Net Pay
             sankey_sav = max(0, sankey_net - total_logged_exp)
             if sankey_sav > 0:
-                sankey_labels.append(f"Savings<br>Rs. {sankey_sav:,.0f}")
+                sankey_labels.append("Savings")
                 source.append(1)
                 target.append(current_idx)
                 value.append(sankey_sav)
-                node_colors.append("#17becf")
-                link_colors.append("rgba(23, 190, 207, 0.3)")
+                node_colors.append("#20B2AA")
+                link_colors.append(gray_link)
             
-            dynamic_height = max(600, 150 + len(sankey_labels) * 30)
+            # Dynamic height ensures nodes never overlap vertically
+            dynamic_height = max(550, 100 + len(sankey_labels) * 20)
 
             fig_sankey = go.Figure(data=[go.Sankey(
+                valueformat = ",.0f",
+                valuesuffix = " PKR",
+                arrangement = "snap",
                 node = dict(
-                    pad = 25, 
-                    thickness = 20, 
+                    pad = 15, 
+                    thickness = 15, 
                     line = dict(color = "rgba(0,0,0,0.3)", width = 0.5), 
                     label = sankey_labels,
                     color = node_colors
@@ -495,11 +506,12 @@ def main():
                 )
             )])
             
+            # Clean layout matching HTML look
             fig_sankey.update_layout(
                 title_text="<b>Cash Flow & Sub-Category Sankey Diagram</b>", 
-                font=dict(size=13, color="black", family="Arial, sans-serif"),
+                font=dict(size=12, color="#2c3e50", family="Arial, sans-serif"),
                 height=dynamic_height, 
-                margin=dict(l=150, r=200, t=50, b=50),
+                margin=dict(l=20, r=150, t=40, b=40),
                 plot_bgcolor='white',
                 paper_bgcolor='white'
             )
