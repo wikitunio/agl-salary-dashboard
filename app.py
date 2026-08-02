@@ -395,11 +395,8 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
-            # Labels have INLINE NUMBERS to prevent HTML stacking / overlap issues
-            sankey_labels = [
-                f"Gross Pay (Rs. {sankey_gross:,.0f})", 
-                f"Net Pay (Rs. {sankey_net:,.0f})"
-            ]
+            # Labels have NO NUMBERS in the text string (prevents overlap/stacking)
+            sankey_labels = ["Gross Pay", "Net Pay"]
             
             # Pastel color palette matching HTML output
             pastel_colors = ['#8c9eff', '#ff9f9b', '#99e2a2', '#ffc07a', '#ccb0db', '#e2a79d', '#f9c5da', '#d1d1bd', '#e5e59b', '#aee5ef']
@@ -427,7 +424,7 @@ def main():
             
             for i, (name, val) in enumerate(deductions.items()):
                 if val > 0:
-                    sankey_labels.append(f"{name} (Rs. {val:,.0f})")
+                    sankey_labels.append(name)
                     source.append(0) # From Gross Pay
                     target.append(current_idx)
                     value.append(val)
@@ -451,7 +448,7 @@ def main():
                 color_offset = 0
                 for cat, val in cat_sums.items():
                     if val > 0:
-                        sankey_labels.append(f"{cat} (Rs. {val:,.0f})")
+                        sankey_labels.append(cat)
                         source.append(1) # From Net Pay
                         target.append(current_idx)
                         value.append(val)
@@ -467,7 +464,7 @@ def main():
                 for (cat, subcat), val in subcat_sums.items():
                     if val > 0:
                         # Append the Sub-Category Node
-                        sankey_labels.append(f"{subcat} (Rs. {val:,.0f})")
+                        sankey_labels.append(subcat)
                         source.append(cat_idx_map[cat]) # Link flows from the Parent Category
                         target.append(current_idx)
                         value.append(val)
@@ -480,22 +477,22 @@ def main():
             # 4. Savings from Net Pay
             sankey_sav = max(0, sankey_net - total_logged_exp)
             if sankey_sav > 0:
-                sankey_labels.append(f"Savings (Rs. {sankey_sav:,.0f})")
+                sankey_labels.append("Savings")
                 source.append(1)
                 target.append(current_idx)
                 value.append(sankey_sav)
                 node_colors.append("#20B2AA")
                 link_colors.append(gray_link)
             
-            # Dynamic height ensures nodes never overlap vertically (spaced 35px per label)
-            dynamic_height = max(550, 150 + len(sankey_labels) * 35)
+            # Dynamic height ensures nodes never overlap vertically
+            dynamic_height = max(550, 100 + len(sankey_labels) * 20)
 
             fig_sankey = go.Figure(data=[go.Sankey(
                 valueformat = ",.0f",
                 valuesuffix = " PKR",
                 arrangement = "snap",
                 node = dict(
-                    pad = 20, 
+                    pad = 15, 
                     thickness = 15, 
                     line = dict(color = "rgba(0,0,0,0.3)", width = 0.5), 
                     label = sankey_labels,
@@ -509,12 +506,12 @@ def main():
                 )
             )])
             
-            # Clean layout matching HTML look with huge left/right margins to prevent cut-offs
+            # Clean layout matching HTML look
             fig_sankey.update_layout(
                 title_text="<b>Cash Flow & Sub-Category Sankey Diagram</b>", 
                 font=dict(size=12, color="#2c3e50", family="Arial, sans-serif"),
                 height=dynamic_height, 
-                margin=dict(l=200, r=200, t=40, b=40),
+                margin=dict(l=20, r=150, t=40, b=40),
                 plot_bgcolor='white',
                 paper_bgcolor='white'
             )
