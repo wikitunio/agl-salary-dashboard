@@ -173,19 +173,16 @@ def main():
         render_executive_kpi(df)
 
         # --- SIDEBAR CONTROLS ---
-        # FEATURE 4: Logout Button
         if st.sidebar.button("🚪 Logout", use_container_width=True):
             st.session_state["password_correct"] = False
             st.rerun()
             
         st.sidebar.markdown("### ⚙️ Financial Engine")
         
-        # FEATURE 2: Sync Button Renamed to "Refresh"
         if st.sidebar.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 
-        # FEATURE 3: Search Payslip instead of dropdowns
         st.sidebar.markdown("### 🔍 Search Payslip")
         all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
         selected_month = st.sidebar.selectbox("Type to search (e.g. APR, 2025, Bonus)", options=all_months_sorted, index=0)
@@ -194,7 +191,6 @@ def main():
         selected_fy = month_data['FY']
         df_fy = df[df['FY'] == selected_fy]
 
-        # FEATURE 9: Advanced Filters Section
         with st.sidebar.expander("🛠️ Advanced Filters", expanded=False):
             st.date_input("Custom Date Range", [])
             st.selectbox("Quarter", ["All", "Q1", "Q2", "Q3", "Q4"])
@@ -287,7 +283,6 @@ def main():
             prev_target_month = str(prev_exp_month_name).strip().upper() if prev_exp_month_name else None
             prev_exp = df_exp[df_exp['Salary Month'] == prev_target_month] if prev_target_month else pd.DataFrame()
             
-            # --- FEATURE 8: Generate Monthly PDF Report ---
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
@@ -327,7 +322,6 @@ def main():
                 ex_cols[2].metric("True Savings Rate", f"{savings_rate:.1f}%")
                 ex_cols[3].metric("Financial Health", f"{health_score} / 100", stars, delta_color="off")
                 
-                # PDF Download Button
                 with ex_cols[4]:
                     if FPDF_AVAILABLE:
                         pdf_bytes = generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_rate)
@@ -335,7 +329,6 @@ def main():
                     else:
                         st.button("📑 Generate Report", disabled=True, help="Add 'fpdf' to requirements.txt to enable.")
                 
-                # --- FEATURE 7: Sub-Category Expense Ranking (Replaces Pie Chart) ---
                 st.markdown("###### 📊 Expense Ranking & MoM Change (By Sub-Category / Person)")
                 
                 top_10 = category_sums.sort_values(ascending=False).head(10)
@@ -354,7 +347,6 @@ def main():
                 with rank_col2:
                     inc_val = mom_diffs.get(largest_increase_cat, 0)
                     dec_val = mom_diffs.get(largest_decrease_cat, 0)
-                    # Splitting text visually for metrics to prevent cutoff
                     inc_label = largest_increase_cat.split(" - ")[-1] if " - " in largest_increase_cat else largest_increase_cat
                     dec_label = largest_decrease_cat.split(" - ")[-1] if " - " in largest_decrease_cat else largest_decrease_cat
                     
@@ -383,8 +375,6 @@ def main():
             st.subheader("💧 Salary & Expense Waterfall")
             
             # --- FEATURE 10: High-Resolution Multi-Tier Sankey Diagram ---
-            
-            # CRITICAL CSS INJECTION: Removes Plotly's ugly text-shadow for crisp fonts
             st.markdown("""
             <style>
             .sankey-node text {
@@ -396,8 +386,11 @@ def main():
             
             sankey_tax = month_data['Income Tax']
             sankey_pf = month_data['PF Deduction']
-            sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
-            sankey_other = max(0, month_data['Total Deductions'] - (sankey_tax + sankey_pf + sankey_site))
+            sankey_mess = month_data['Mess Bill']
+            sankey_club = month_data['Club Bill']
+            sankey_rent = month_data['House Rent Deduction']
+            sankey_eobi = month_data['EOBI']
+            sankey_other = max(0, month_data['Total Deductions'] - (sankey_tax + sankey_pf + sankey_mess + sankey_club + sankey_rent + sankey_eobi))
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
@@ -414,11 +407,14 @@ def main():
             
             current_idx = 2
             
-            # 1. Deductions directly from Gross Pay
+            # 1. Deductions explicitly separated exactly as in payslip
             deductions = {
                 "Income Tax": (sankey_tax, "#d62728", "rgba(214, 39, 40, 0.3)"),
                 "PF Deduction": (sankey_pf, "#ff7f0e", "rgba(255, 127, 14, 0.3)"),
-                "Site Living": (sankey_site, "#8c564b", "rgba(140, 86, 75, 0.3)"),
+                "Mess Bill": (sankey_mess, "#8c564b", "rgba(140, 86, 75, 0.3)"),
+                "Club Bill": (sankey_club, "#c49c94", "rgba(196, 156, 148, 0.3)"),
+                "Rent Deduction": (sankey_rent, "#9467bd", "rgba(148, 103, 189, 0.3)"),
+                "EOBI": (sankey_eobi, "#c5b0d5", "rgba(197, 176, 213, 0.3)"),
                 "Other Ded.": (sankey_other, "#7f7f7f", "rgba(127, 127, 127, 0.3)")
             }
             
@@ -481,7 +477,6 @@ def main():
                 node_colors.append("#17becf")
                 link_colors.append("rgba(23, 190, 207, 0.3)")
             
-            # Dynamic height ensures nodes never overlap when Sub-Categories are added
             dynamic_height = max(600, 150 + len(sankey_labels) * 30)
 
             fig_sankey = go.Figure(data=[go.Sankey(
@@ -500,7 +495,6 @@ def main():
                 )
             )])
             
-            # Expanded left/right margins to prevent Sub-Categories from cutting off
             fig_sankey.update_layout(
                 title_text="<b>Cash Flow & Sub-Category Sankey Diagram</b>", 
                 font=dict(size=13, color="black", family="Arial, sans-serif"),
@@ -537,11 +531,9 @@ def main():
             
             wf_savings = wf_net
             if not curr_exp.empty:
-                # Pull subcategories into waterfall
                 subcat_sums = curr_exp.groupby(['Category', 'Sub-Category / Person'])['Amount (PKR)'].sum().sort_values(ascending=False)
                 for (cat, subcat), val in subcat_sums.items():
                     if val > 0:
-                        # Truncate strings specifically to prevent X-axis crowding
                         x_label = f"{str(cat)[:10]}<br>{str(subcat)[:12]}"
                         x_list.append(x_label)
                         y_list.append(-val)
