@@ -33,28 +33,22 @@ def check_password():
 def render_executive_kpi(df):
     st.markdown("### 📊 Lifetime Executive Summary")
     
-    # --- Calculations ---
     total_earnings = df['Gross Pay'].sum()
     total_tax = df['Income Tax'].sum()
-    
-    # Assuming PF Company Match is equal to Employee Deduction
     total_pf_saved = (df['PF Deduction'].sum()) * 2 
     
     avg_gross = df['Gross Pay'].mean()
     avg_net = df['Net Pay'].mean()
     
-    # Find the row with the highest gross salary
     highest_salary_row = df.loc[df['Gross Pay'].idxmax()]
     highest_month = highest_salary_row['Month']
     highest_amount = highest_salary_row['Gross Pay']
     
-    # --- UI Layout ---
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
     
     kpi1.metric("Total Career Earnings", f"Rs. {total_earnings:,.0f}")
     kpi2.metric("Total Tax Paid", f"Rs. {total_tax:,.0f}")
     kpi3.metric("Total PF Saved", f"Rs. {total_pf_saved:,.0f}", help="Employee + Company")
-    
     kpi4.metric("Avg Monthly Net", f"Rs. {avg_net:,.0f}", f"Gross: {avg_gross:,.0f}", delta_color="off")
     kpi5.metric("Highest Salary", f"Rs. {highest_amount:,.0f}", f"{highest_month}", delta_color="off")
     
@@ -62,7 +56,6 @@ def render_executive_kpi(df):
 
 def main():
     if check_password():
-        # --- BRANDING & HEADER ---
         st.markdown("<h1>🏭 AgriTech Ltd <span style='font-size:24px; color:gray;'>| Executive Compensation Portal</span></h1>", unsafe_allow_html=True)
         
         with st.spinner("Synchronizing securely with Gmail..."):
@@ -72,11 +65,15 @@ def main():
             st.warning("No valid pay slip data could be parsed. Check email formatting.")
             return
 
-        # ---> NEW: INJECT KPI DASHBOARD HERE <---
         render_executive_kpi(df)
 
         # --- SIDEBAR CONTROLS ---
         st.sidebar.markdown("### ⚙️ Financial Engine")
+        
+        if st.sidebar.button("🔄 Sync Live Excel Data", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+            
         st.sidebar.markdown("Isolate a specific tax cycle.")
         
         available_fys = sorted(df['FY'].unique(), reverse=True)
@@ -95,7 +92,6 @@ def main():
         st.sidebar.markdown("---")
         st.sidebar.caption("✅ Version 3.1: Modular + Tax Tab")
 
-        # --- DELTA ENGINE (YoY & MoM) ---
         prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
         current_index = df[df['Date'] == month_data['Date']].index[0]
         prev_month_data = df.iloc[current_index - 1] if current_index > 0 else None
@@ -123,7 +119,6 @@ def main():
                     return f"{sign} Rs. {abs(diff):,.0f} MoM"
             return None
 
-        # --- SECTION 1: FINANCIAL YEAR CUMULATIVE ---
         st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
         col_fy1, col_fy2, col_fy3, col_fy4 = st.columns(4)
         col_fy1.metric("Gross Pay (FY)", f"Rs. {df_fy['Gross Pay'].sum():,.0f}")
@@ -132,7 +127,6 @@ def main():
         col_fy4.metric("PF Saved This Year", f"Rs. {df_fy['PF Deduction'].sum():,.0f}")
         st.divider()
 
-        # --- SECTION 2A: FOCUS MONTH SNAPSHOT ---
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         st.markdown("##### 💰 Earnings (Year-over-Year Tracking)")
         earn1, earn2, earn3, earn4 = st.columns(4)
@@ -164,12 +158,19 @@ def main():
         # --- SECTION 2B: CASH FLOW & FINANCIAL HEALTH ---
         df_exp, exp_error = fetch_expense_data()
         
+        # Safe default values
+        remaining_cash = month_data['Net Pay']
+        total_spent = 0
+        curr_exp = pd.DataFrame()
+        prev_exp = pd.DataFrame()
+        
         if not df_exp.empty:
-            df_exp['Salary Month'] = df_exp['Salary Month'].astype(str).str.strip()
-            curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
+            target_month = str(month_data['Month']).strip().upper()
+            curr_exp = df_exp[df_exp['Salary Month'] == target_month]
             
             prev_exp_month_name = prev_month_data['Month'] if prev_month_data is not None else None
-            prev_exp = df_exp[df_exp['Salary Month'] == prev_exp_month_name] if prev_exp_month_name else pd.DataFrame()
+            prev_target_month = str(prev_exp_month_name).strip().upper() if prev_exp_month_name else None
+            prev_exp = df_exp[df_exp['Salary Month'] == prev_target_month] if prev_target_month else pd.DataFrame()
             
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
@@ -179,34 +180,24 @@ def main():
                 net_pay = month_data['Net Pay']
                 remaining_cash = net_pay - total_spent
                 
-                # --- NEW: FINANCIAL HEALTH ENGINE ---
-                # 1. Savings Rate Calculation
                 savings_rate = (remaining_cash / net_pay * 100) if net_pay > 0 else 0
-                
-                # 2. PF Growth Rate Calculation
-                total_pf = month_data['PF Deduction'] * 2 # Employee + Company Match
+                total_pf = month_data['PF Deduction'] * 2 
                 pf_rate = (total_pf / month_data['Gross Pay'] * 100) if month_data['Gross Pay'] > 0 else 0
-                
-                # 3. Site Efficiency Calculation
                 site_expenses = month_data['Mess Bill'] + month_data['Club Bill']
                 hard_area = month_data['Hard Area']
                 site_ratio = (site_expenses / hard_area * 100) if hard_area > 0 else 100
                 
-                # 4. Grading Logic
-                score_savings = min(50, (max(0, savings_rate) / 30) * 50) # Target: 30% savings rate (50 pts)
-                score_pf = min(30, (pf_rate / 10) * 30)                   # Target: 10% of gross in PF (30 pts)
-                score_site = 20 if site_ratio <= 100 else max(0, 20 - (site_ratio - 100)) # Target: Mess/Club < Hard Area (20 pts)
+                score_savings = min(50, (max(0, savings_rate) / 30) * 50) 
+                score_pf = min(30, (pf_rate / 10) * 30)                   
+                score_site = 20 if site_ratio <= 100 else max(0, 20 - (site_ratio - 100)) 
                 
                 health_score = int(score_savings + score_pf + score_site)
                 
-                # 5. Star Rating Assessment
                 if health_score >= 90: stars = "⭐⭐⭐⭐⭐ Excellent"
                 elif health_score >= 70: stars = "⭐⭐⭐⭐ Good"
                 elif health_score >= 50: stars = "⭐⭐⭐ Fair"
                 else: stars = "⭐⭐ Needs Attention"
-                # ------------------------------------
                 
-                # Total MoM Calculation
                 total_mom_str = None
                 if not prev_exp.empty:
                     prev_total = prev_exp['Amount (PKR)'].sum()
@@ -214,7 +205,6 @@ def main():
                     sign = "+" if diff >= 0 else "-"
                     total_mom_str = f"{sign} Rs. {abs(diff):,.0f} MoM"
                 
-                # Render Executive Health Metrics
                 ex_cols = st.columns(4)
                 ex_cols[0].metric("Total Spent", f"Rs. {total_spent:,.0f}", delta=total_mom_str, delta_color="inverse")
                 ex_cols[1].metric("Remaining Cash", f"Rs. {remaining_cash:,.0f}")
@@ -231,7 +221,6 @@ def main():
                         return f"{sign} Rs. {abs(diff):,.0f} MoM"
                     return None
                     
-                # --- NEW LAYOUT: PIE CHART + METRICS GRID ---
                 pie_col, met_col = st.columns([1, 1.5])
                 
                 with pie_col:
@@ -249,26 +238,23 @@ def main():
                                 cat = categories[i+j]
                                 val = category_sums[cat]
                                 cols[j].metric(cat, f"Rs. {val:,.0f}", delta=get_cat_mom_delta(cat, val), delta_color="inverse")
-                # --------------------------------------------
-
             else:
                 st.info(f"No manual expenses logged yet for {month_data['Month']}.")
                 
         elif exp_error:
             st.error(f"⚠️ {exp_error}")
-# --- SECTION 2C: SMART FINANCIAL INSIGHTS (AI POWERED) ---
+
+        # --- SECTION 2C: SMART FINANCIAL INSIGHTS (AI POWERED) ---
         st.markdown("### 🤖 Smart Financial Insights")
         
         with st.expander(f"Click to view AI-Generated Insights for {month_data['Month']}", expanded=True):
             if prev_month_data is not None:
-                # Define a unique memory key for this month so we only call the API once per month
                 cache_key = f"insights_{selected_month}_{selected_fy}"
                 
                 if "ai_insights_cache" not in st.session_state:
                     st.session_state["ai_insights_cache"] = {}
                     
                 if cache_key in st.session_state["ai_insights_cache"]:
-                    # Show the memorized AI response instantly
                     st.markdown(st.session_state["ai_insights_cache"][cache_key])
                 else:
                     st.markdown("Want a professional AI analysis of your Month-over-Month cash flow?")
@@ -277,7 +263,6 @@ def main():
                             try:
                                 client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
                                 
-                                # --- Smart Model Selector ---
                                 active_models = [m.id for m in client.models.list().data]
                                 preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
                                 chosen_model = next((model for model in preferred_models if model in active_models), None)
@@ -285,14 +270,12 @@ def main():
                                     valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
                                     chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
                                     
-                                # --- SAFE PRE-FORMATTED STRINGS ---
                                 g_curr = "{:,.0f}".format(month_data['Gross Pay'])
                                 n_curr = "{:,.0f}".format(month_data['Net Pay'])
                                 t_curr = "{:,.0f}".format(month_data['Income Tax'])
                                 s_curr = "{:,.0f}".format(month_data['Mess Bill'] + month_data['Club Bill'])
                                 
-                                exp_c_val = total_spent if 'total_spent' in locals() else 0
-                                e_curr = "{:,.0f}".format(exp_c_val)
+                                e_curr = "{:,.0f}".format(total_spent)
                                 
                                 g_prev = "{:,.0f}".format(prev_month_data['Gross Pay'])
                                 n_prev = "{:,.0f}".format(prev_month_data['Net Pay'])
@@ -343,12 +326,11 @@ def main():
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        
         # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
         st.divider()
         st.markdown("### 📈 AI Wealth & Investment Planner (Live Web)")
         
-        if 'remaining_cash' in locals() and remaining_cash > 0:
+        if remaining_cash > 0:
             st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
             st.caption("Let Groq AI search the live web to generate a dynamic portfolio based on current KSE-100 and SBP rates.")
             
@@ -374,10 +356,9 @@ def main():
                                     for r in results:
                                         live_news_context += r['body'] + "\n"
                         except Exception:
-                            pass # If DuckDuckGo blocks us, catch it silently and use the fallback below
+                            pass 
                             
                         # --- ANTI-HALLUCINATION FALLBACK ---
-                        # If the web scraper failed to get enough data, inject the verified 2026 reality
                         if len(live_news_context) < 50:
                             live_news_context = "Fallback Data: SBP Policy rate is currently 11.5%. KSE-100 is hovering around 176,000 points. Inflation has cooled down to 11.1%. The PKR to USD parity is stable around 278."
                             
@@ -433,7 +414,7 @@ def main():
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
                         
-        elif 'remaining_cash' in locals():
+        else:
             st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")            
         # -------------------------                              
         # --- SECTION 3: TABS ---
@@ -451,7 +432,6 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # Prepare initial variables
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -461,22 +441,14 @@ def main():
             wf_eobi = month_data['EOBI']
             wf_net = month_data['Net Pay']
             
-            # Safely fetch Pocket Expenses
-            wf_expenses = 0
-            if 'df_exp' in locals() and not df_exp.empty:
-                curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
-                if not curr_exp.empty:
-                    wf_expenses = curr_exp['Amount (PKR)'].sum()
-                    
+            wf_expenses = total_spent
             wf_savings = wf_net - wf_expenses
             
-            # Dynamically build the chart sequence
             x_list = ["Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "Rent", "EOBI"]
             y_list = [wf_gross, -wf_tax, -wf_pf, -wf_mess, -wf_club, -wf_rent, -wf_eobi]
             text_list = [f"{wf_gross:,.0f}", f"-{wf_tax:,.0f}", f"-{wf_pf:,.0f}", f"-{wf_mess:,.0f}", f"-{wf_club:,.0f}", f"-{wf_rent:,.0f}", f"-{wf_eobi:,.0f}"]
             measure_list = ["relative"] * 7
             
-            # Catch unmapped payslip deductions automatically
             unmapped = month_data['Total Deductions'] - (wf_tax + wf_pf + wf_mess + wf_club + wf_rent + wf_eobi)
             if unmapped > 5:
                 x_list.append("Other Deductions")
@@ -484,13 +456,11 @@ def main():
                 text_list.append(f"-{unmapped:,.0f}")
                 measure_list.append("relative")
                 
-            # Add the Net Pay checkpoint, the Expenses step, and the Final Cash total
             x_list.extend(["Net Pay", "Pocket Expenses", "Remaining Cash"])
             y_list.extend([wf_net, -wf_expenses, wf_savings])
             text_list.extend([f"{wf_net:,.0f}", f"-{wf_expenses:,.0f}", f"{wf_savings:,.0f}"])
             measure_list.extend(["total", "relative", "total"])
             
-            # Build the Plotly Waterfall Chart
             fig_waterfall = go.Figure(go.Waterfall(
                 name="Salary Flow", orientation="v",
                 measure=measure_list,
@@ -499,9 +469,9 @@ def main():
                 textposition="outside",
                 text=text_list,
                 connector={"line": {"color": "gray", "width": 1.5}},
-                decreasing={"marker": {"color": "#ff4b4b"}},   # Streamlit Red for all deductions/expenses
-                increasing={"marker": {"color": "#2ca02c"}},   # Green for starting Gross Pay
-                totals={"marker": {"color": "#1f77b4"}}        # Blue for Net Pay and Final Cash
+                decreasing={"marker": {"color": "#ff4b4b"}},  
+                increasing={"marker": {"color": "#2ca02c"}},   
+                totals={"marker": {"color": "#1f77b4"}}        
             ))
             
             fig_waterfall.update_layout(
@@ -513,7 +483,6 @@ def main():
             )
             st.plotly_chart(fig_waterfall, use_container_width=True)
 
-        # --- NEW: SALARY GROWTH ANALYTICS ---
             st.markdown(f"### 📈 Salary Growth Analytics ({selected_fy})")
             
             df_fy_sorted = df_fy.sort_values('Date')
@@ -521,7 +490,6 @@ def main():
                 start_m = df_fy_sorted.iloc[0]
                 end_m = df_fy_sorted.iloc[-1]
                 
-                # Standard Growth Formula: (New - Old) / Old * 100
                 def calc_g(start, end):
                     return ((end - start) / start * 100) if start > 0 else 0
                 
@@ -533,10 +501,9 @@ def main():
                 end_allow = end_m['Hard Area'] + end_m['House Rent Allowance'] + end_m['Other Allowances'] + end_m['Other Earnings']
                 g_allow = calc_g(start_allow, end_allow)
                 
-                # Lifetime CAGR Calculation
                 df_sorted_all = df.sort_values('Date')
                 days_diff = (df_sorted_all.iloc[-1]['Date'] - df_sorted_all.iloc[0]['Date']).days
-                total_years = max(days_diff / 365.25, 1.0) # Prevents inflation if less than 1 year of data
+                total_years = max(days_diff / 365.25, 1.0) 
                 
                 first_gross = df_sorted_all.iloc[0]['Gross Pay']
                 last_gross = df_sorted_all.iloc[-1]['Gross Pay']
@@ -556,9 +523,6 @@ def main():
             
             st.divider()
             
-            st.divider()
-            
-            # Keep original charts below the waterfall
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
                 st.subheader(f"Earnings Curve ({selected_fy})")
@@ -685,7 +649,6 @@ def main():
             if df_exp.empty:
                 st.warning("⚠️ Expense file could not be read.")
             else:
-                curr_exp = df_exp[df_exp['Salary Month'] == month_data['Month']]
                 if not curr_exp.empty:
                     st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
                 else:
@@ -694,12 +657,10 @@ def main():
         with tab7:
             st.subheader(f"🏛️ Advanced Tax Analytics ({selected_fy})")
             
-            # Extract month specific variables
             gross = month_data['Gross Pay']
             basic = month_data['Basic Pay']
             tax = month_data['Income Tax']
             
-            # Calculate Analytics
             effective_rate = (tax / gross * 100) if gross > 0 else 0
             tax_pct_basic = (tax / basic * 100) if basic > 0 else 0
             cum_tax_fy = df_fy['Income Tax'].sum()
@@ -739,12 +700,10 @@ def main():
                 sim_eobi = st.number_input("EOBI", value=float(month_data['EOBI']), step=10.0)
 
             with sim_col2:
-                # Calculate Simulated Totals
                 sim_gross = sim_basic + sim_hard_area + sim_hra + sim_other_earn
                 sim_total_deductions = sim_tax + sim_pf + sim_mess_club + sim_rent_ded + sim_eobi
                 sim_net = sim_gross - sim_total_deductions
                 
-                # Calculate Deltas (Differences from Current Month)
                 diff_gross = sim_gross - month_data['Gross Pay']
                 diff_net = sim_net - month_data['Net Pay']
                 
@@ -755,7 +714,6 @@ def main():
                 
                 st.divider()
                 
-                # Mini Simulator Waterfall Chart
                 fig_sim = go.Figure(go.Waterfall(
                     name="Simulation", orientation="v",
                     measure=["relative", "relative", "total"],
@@ -772,7 +730,6 @@ def main():
                 st.plotly_chart(fig_sim, use_container_width=True)
 
         with tab9:
-            # --- CUSTOM CSS FOR GEMINI-LIKE UI ---
             st.markdown("""
             <style>
             .stChatMessage {
@@ -795,7 +752,6 @@ def main():
             </style>
             """, unsafe_allow_html=True)
 
-            # --- HEADER BANNER ---
             head_col1, head_col2 = st.columns([4, 1])
             with head_col1:
                 st.markdown("## ✨ Gemini Financial Assistant")
@@ -808,11 +764,9 @@ def main():
             st.caption(f"Currently analyzing context for: **{month_data['Month']}** ({selected_fy})")
             st.divider()
 
-            # Initialize chat history
             if "groq_chat_history" not in st.session_state:
                 st.session_state["groq_chat_history"] = []
 
-            # --- GEMINI-STYLE QUICK PROMPT CHIPS ---
             selected_chip = None
             if len(st.session_state["groq_chat_history"]) == 0:
                 st.markdown("##### 💡 Suggested Prompts")
@@ -828,22 +782,17 @@ def main():
                     selected_chip = "What is my current Provident Fund status and contribution progress toward my goal?"
                 st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- 1. RENDER CHAT HISTORY (ALWAYS ABOVE THE INPUT BOX) ---
             for message in st.session_state["groq_chat_history"]:
                 avatar = "👤" if message["role"] == "user" else "✨"
                 with st.chat_message(message["role"], avatar=avatar):
                     st.markdown(message["content"])
 
-            # --- 2. CHAT INPUT BOX ---
             user_input = st.chat_input("Ask Gemini anything about your salary, tax, or expenses...")
             prompt = selected_chip or user_input
 
-            # --- 3. PROCESS NEW INPUT & REFRESH ---
             if prompt:
-                # Add User Message to History
                 st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
 
-                # Build Context
                 expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent:,.0f}" if 'total_spent' in locals() else "No manual expenses logged this month."
                 
                 system_context = f"""
@@ -877,7 +826,6 @@ def main():
                 messages_for_api = [{"role": "system", "content": system_context}]
                 messages_for_api.extend(st.session_state["groq_chat_history"])
 
-                # Call Groq Engine
                 try:
                     client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
                     
@@ -896,11 +844,7 @@ def main():
                     )
                     
                     response = completion.choices[0].message.content
-                    
-                    # Append Response to History
                     st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
-                    
-                    # FORCE INSTANT REFRESH TO MOVE MESSAGES ABOVE THE INPUT BOX
                     st.rerun()
                     
                 except Exception as e:
