@@ -265,6 +265,13 @@ def main():
         # --- CASH FLOW & FINANCIAL HEALTH ---
         df_exp, exp_error = fetch_expense_data()
         
+        # Clean and Combine Sub-Categories
+        if not df_exp.empty:
+            if 'Sub-Category / Person' not in df_exp.columns:
+                df_exp['Sub-Category / Person'] = 'Uncategorized'
+            df_exp['Sub-Category / Person'] = df_exp['Sub-Category / Person'].fillna('Uncategorized').astype(str)
+            df_exp['Detailed Category'] = df_exp['Category'].astype(str) + " - " + df_exp['Sub-Category / Person']
+        
         remaining_cash = month_data['Net Pay']
         total_spent = 0
         curr_exp = pd.DataFrame()
@@ -284,7 +291,8 @@ def main():
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
-                category_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
+                # Group by the newly combined Detailed Category
+                category_sums = curr_exp.groupby('Detailed Category')['Amount (PKR)'].sum()
                 total_spent = category_sums.sum()
                 net_pay = month_data['Net Pay']
                 remaining_cash = net_pay - total_spent
@@ -327,13 +335,13 @@ def main():
                     else:
                         st.button("📑 Generate Report", disabled=True, help="Add 'fpdf' to requirements.txt to enable.")
                 
-                # --- FEATURE 7: Expense Categories Ranking (Replaces Pie Chart) ---
-                st.markdown("###### 📊 Expense Ranking & MoM Change")
+                # --- FEATURE 7: Sub-Category Expense Ranking (Replaces Pie Chart) ---
+                st.markdown("###### 📊 Expense Ranking & MoM Change (By Sub-Category / Person)")
                 
                 top_10 = category_sums.sort_values(ascending=False).head(10)
                 mom_diffs = {}
                 for cat, val in category_sums.items():
-                    prev_val = prev_exp[prev_exp['Category'] == cat]['Amount (PKR)'].sum() if (not prev_exp.empty and cat in prev_exp['Category'].values) else 0
+                    prev_val = prev_exp[prev_exp['Detailed Category'] == cat]['Amount (PKR)'].sum() if (not prev_exp.empty and cat in prev_exp['Detailed Category'].values) else 0
                     mom_diffs[cat] = val - prev_val
                     
                 largest_increase_cat = max(mom_diffs, key=mom_diffs.get) if mom_diffs else "N/A"
@@ -341,13 +349,17 @@ def main():
                 
                 rank_col1, rank_col2 = st.columns([1.5, 1])
                 with rank_col1:
-                    st.markdown("**Top 10 Expenses**")
-                    st.dataframe(top_10.reset_index().rename(columns={'Amount (PKR)': 'Spent (Rs.)'}), use_container_width=True, hide_index=True)
+                    st.markdown("**Top 10 Specific Expenses**")
+                    st.dataframe(top_10.reset_index().rename(columns={'Detailed Category':'Sub-Category / Person', 'Amount (PKR)': 'Spent (Rs.)'}), use_container_width=True, hide_index=True)
                 with rank_col2:
                     inc_val = mom_diffs.get(largest_increase_cat, 0)
                     dec_val = mom_diffs.get(largest_decrease_cat, 0)
-                    st.metric("🔺 Largest Increase", largest_increase_cat, f"+{inc_val:,.0f} MoM", delta_color="inverse")
-                    st.metric("🔻 Largest Decrease", largest_decrease_cat, f"{dec_val:,.0f} MoM", delta_color="inverse")
+                    # Splitting text visually for metrics to prevent cutoff
+                    inc_label = largest_increase_cat.split(" - ")[-1] if " - " in largest_increase_cat else largest_increase_cat
+                    dec_label = largest_decrease_cat.split(" - ")[-1] if " - " in largest_decrease_cat else largest_decrease_cat
+                    
+                    st.metric("🔺 Largest Increase", inc_label, f"+{inc_val:,.0f} MoM", delta_color="inverse", help=largest_increase_cat)
+                    st.metric("🔻 Largest Decrease", dec_label, f"{dec_val:,.0f} MoM", delta_color="inverse", help=largest_decrease_cat)
             else:
                 st.info(f"No manual expenses logged yet for {month_data['Month']}.")
         elif exp_error:
@@ -370,10 +382,9 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # --- FEATURE 10: High-Resolution Dynamic Sankey Diagram ---
+            # --- FEATURE 10: High-Resolution Multi-Tier Sankey Diagram ---
             
-            # CRITICAL CSS INJECTION: 
-            # This completely removes Plotly's ugly default text-shadow, making the labels ultra-sharp and clean
+            # CRITICAL CSS INJECTION: Removes Plotly's ugly text-shadow for crisp fonts
             st.markdown("""
             <style>
             .sankey-node text {
@@ -425,20 +436,38 @@ def main():
             source.append(0)
             target.append(1)
             value.append(sankey_net)
-            link_colors.append("rgba(44, 160, 44, 0.3)") # Greenish link
+            link_colors.append("rgba(44, 160, 44, 0.3)")
             
-            # 3. Pocket Expenses from Net Pay
+            # 3. Pocket Expenses from Net Pay (MULTI-TIER LOGIC)
             total_logged_exp = 0
             if not curr_exp.empty:
+                # Tier 1: Main Category
                 cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum().sort_values(ascending=False)
+                cat_idx_map = {}
+                
                 for cat, val in cat_sums.items():
                     if val > 0:
                         sankey_labels.append(f"{cat}<br>Rs. {val:,.0f}")
                         source.append(1) # From Net Pay
                         target.append(current_idx)
                         value.append(val)
-                        node_colors.append("#e377c2") # Pink
-                        link_colors.append("rgba(227, 119, 194, 0.3)")
+                        node_colors.append("#e377c2") # Dark Pink
+                        link_colors.append("rgba(227, 119, 194, 0.4)")
+                        cat_idx_map[cat] = current_idx
+                        current_idx += 1
+                        
+                # Tier 2: Sub-Category / Person
+                subcat_sums = curr_exp.groupby(['Category', 'Sub-Category / Person'])['Amount (PKR)'].sum().sort_values(ascending=False)
+                
+                for (cat, subcat), val in subcat_sums.items():
+                    if val > 0:
+                        # Append the Sub-Category Node
+                        sankey_labels.append(f"{subcat}<br>Rs. {val:,.0f}")
+                        source.append(cat_idx_map[cat]) # Link flows from the Parent Category
+                        target.append(current_idx)
+                        value.append(val)
+                        node_colors.append("#f7b6d2") # Light Pink
+                        link_colors.append("rgba(247, 182, 210, 0.4)")
                         total_logged_exp += val
                         current_idx += 1
                         
@@ -452,13 +481,13 @@ def main():
                 node_colors.append("#17becf")
                 link_colors.append("rgba(23, 190, 207, 0.3)")
             
-            # Dynamic height calculator guarantees nodes never squash vertically
-            dynamic_height = max(550, 150 + len(sankey_labels) * 35)
+            # Dynamic height ensures nodes never overlap when Sub-Categories are added
+            dynamic_height = max(600, 150 + len(sankey_labels) * 30)
 
             fig_sankey = go.Figure(data=[go.Sankey(
                 node = dict(
                     pad = 25, 
-                    thickness = 25, 
+                    thickness = 20, 
                     line = dict(color = "rgba(0,0,0,0.3)", width = 0.5), 
                     label = sankey_labels,
                     color = node_colors
@@ -471,9 +500,9 @@ def main():
                 )
             )])
             
-            # Massive margins ensure labels are perfectly visible and never cut off
+            # Expanded left/right margins to prevent Sub-Categories from cutting off
             fig_sankey.update_layout(
-                title_text="<b>Cash Flow Sankey Diagram</b>", 
+                title_text="<b>Cash Flow & Sub-Category Sankey Diagram</b>", 
                 font=dict(size=13, color="black", family="Arial, sans-serif"),
                 height=dynamic_height, 
                 margin=dict(l=150, r=200, t=50, b=50),
@@ -482,7 +511,7 @@ def main():
             )
             st.plotly_chart(fig_sankey, use_container_width=True)
             
-            # --- FEATURE 1: Waterfall Breakdown of Individual Expenses ---
+            # --- FEATURE 1: Waterfall Breakdown of Individual Sub-Categories ---
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -508,12 +537,16 @@ def main():
             
             wf_savings = wf_net
             if not curr_exp.empty:
-                cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
-                for cat, val in cat_sums.items():
-                    x_list.append(f"Exp: {cat}")
-                    y_list.append(-val)
-                    measure_list.append("relative")
-                    wf_savings -= val
+                # Pull subcategories into waterfall
+                subcat_sums = curr_exp.groupby(['Category', 'Sub-Category / Person'])['Amount (PKR)'].sum().sort_values(ascending=False)
+                for (cat, subcat), val in subcat_sums.items():
+                    if val > 0:
+                        # Truncate strings specifically to prevent X-axis crowding
+                        x_label = f"{str(cat)[:10]}<br>{str(subcat)[:12]}"
+                        x_list.append(x_label)
+                        y_list.append(-val)
+                        measure_list.append("relative")
+                        wf_savings -= val
             else:
                 x_list.append("No Logged Expenses")
                 y_list.append(0)
