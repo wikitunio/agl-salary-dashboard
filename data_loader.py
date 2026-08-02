@@ -4,6 +4,7 @@ import base64
 import re
 import requests
 import io
+import datetime
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -123,7 +124,7 @@ def fetch_expense_data():
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(sharepoint_url, headers=headers)
+        response = requests.get(sharepoint_url, headers=headers, timeout=10)
         response.raise_for_status() 
         xls = pd.ExcelFile(io.BytesIO(response.content))
         
@@ -131,11 +132,17 @@ def fetch_expense_data():
             df_exp = pd.read_excel(xls, sheet_name='Form1')
         elif 'Salary_Expenses' in xls.sheet_names:
             df_exp = pd.read_excel(xls, sheet_name='Salary_Expenses')
+        else:
+            df_exp = pd.read_excel(xls, sheet_name=xls.sheet_names[0])
+            
     except Exception as e:
         try:
             xls = pd.ExcelFile("Salary_Expenses.xlsx")
             if 'Form1' in xls.sheet_names:
                 df_exp = pd.read_excel(xls, sheet_name='Form1')
+            else:
+                df_exp = pd.read_excel(xls, sheet_name=xls.sheet_names[0])
+            error_msg = f"SharePoint issue (Using local copy): {str(e)}"
         except Exception:
             error_msg = f"Data fetch failed. Error: {str(e)}"
 
@@ -148,9 +155,37 @@ def fetch_expense_data():
             df_exp = df_exp.dropna(subset=['Amount (PKR)'])
 
         if 'Salary Month' in df_exp.columns:
-            df_exp['Salary Month'] = df_exp['Salary Month'].astype(str).str.upper().str.strip()
-            df_exp['Salary Month'] = df_exp['Salary Month'].str.replace(r'-25$', '-2025', regex=True)
-            df_exp['Salary Month'] = df_exp['Salary Month'].str.replace(r'-26$', '-2026', regex=True)
-            df_exp['Salary Month'] = df_exp['Salary Month'].str.replace(r'-27$', '-2027', regex=True)
+            # --- ROBUST MONTH NORMALIZER ---
+            def normalize_month(val):
+                if pd.isna(val):
+                    return ""
+                
+                if isinstance(val, (pd.Timestamp, datetime.datetime)):
+                    return val.strftime('%b-%Y').upper()
+                
+                s = str(val).strip().upper()
+                
+                # Intercept Short Formats like 'JUN-26' and convert them instantly to 'JUN-2026'
+                if re.match(r'^[A-Z]{3}-\d{2}$', s):
+                    s = re.sub(r'-24$', '-2024', s)
+                    s = re.sub(r'-25$', '-2025', s)
+                    s = re.sub(r'-26$', '-2026', s)
+                    s = re.sub(r'-27$', '-2027', s)
+                    return s
+                
+                try:
+                    dt = pd.to_datetime(s, errors='coerce')
+                    if not pd.isna(dt):
+                        return dt.strftime('%b-%Y').upper()
+                except Exception:
+                    pass
+                
+                s = re.sub(r'-24$', '-2024', s)
+                s = re.sub(r'-25$', '-2025', s)
+                s = re.sub(r'-26$', '-2026', s)
+                s = re.sub(r'-27$', '-2027', s)
+                return s
+
+            df_exp['Salary Month'] = df_exp['Salary Month'].apply(normalize_month)
             
     return df_exp, error_msg
