@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from groq import Groq
 import datetime
+import streamlit.components.v1 as components
 
 # Attempt to import PDF generator
 try:
@@ -614,58 +615,68 @@ def main():
                 st.metric("Projected Net Take-Home", f"Rs. {sim_net:,.0f}", f"{'+' if diff_net >=0 else ''}{diff_net:,.0f} from current")
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
 
-        # --- FEATURE 6: Floating AI Chat Assistant (Perfect Blue Circle) ---
-        st.markdown("""
-        <style>
-        /* 1. Position the popover in the bottom right corner */
-        div[data-testid="stPopover"] {
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            z-index: 999999;
-        }
+
+        # --- FEATURE 6: FOOLPROOF JAVASCRIPT FLOATING AI WIDGET ---
+        st.markdown("<style>div[data-testid='stPopover'] { display: none; }</style>", unsafe_allow_html=True)
         
-        /* 2. FORCE the button to be a perfect circle and override Streamlit's hidden min-width */
-        div[data-testid="stPopover"] > button {
-            background-color: #0b57d0 !important; /* Solid ADNOC Blue */
-            background-image: none !important;
-            border-radius: 50% !important;
-            width: 70px !important;
-            height: 70px !important;
-            min-width: 70px !important; /* CRITICAL: Breaks Streamlit's default bar shape */
-            min-height: 70px !important;
-            padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            border: none !important;
-            box-shadow: 0px 8px 16px rgba(0,0,0,0.3) !important;
-            transition: transform 0.2s ease-in-out !important;
-        }
-        
-        /* Hover Effect */
-        div[data-testid="stPopover"] > button:hover {
-            transform: scale(1.1) !important;
-            background-color: #0842a0 !important; 
-        }
-        
-        /* 3. Center the Robot emoji inside the circle */
-        div[data-testid="stPopover"] > button p {
-            font-size: 35px !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 1 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        
-        /* 4. CRITICAL: Physically delete Streamlit's hidden dropdown arrow */
-        div[data-testid="stPopover"] > button svg {
-            display: none !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        components.html("""
+        <script>
+        // Use an interval to continuously hunt for the button, bypassing Streamlit's lazy loading
+        const huntForButton = setInterval(() => {
+            const doc = window.parent.document;
+            const buttons = doc.querySelectorAll('button');
+            
+            buttons.forEach(btn => {
+                // If it's the Robot Button
+                if (btn.innerText.includes('🤖')) {
+                    clearInterval(huntForButton); // Stop hunting once found
+                    
+                    // 1. Force the button to be a solid blue circle
+                    btn.style.setProperty('background-color', '#0b57d0', 'important');
+                    btn.style.setProperty('border-radius', '50%', 'important');
+                    btn.style.setProperty('width', '70px', 'important');
+                    btn.style.setProperty('height', '70px', 'important');
+                    btn.style.setProperty('min-width', '70px', 'important');
+                    btn.style.setProperty('min-height', '70px', 'important');
+                    btn.style.setProperty('padding', '0', 'important');
+                    btn.style.setProperty('display', 'flex', 'important');
+                    btn.style.setProperty('align-items', 'center', 'important');
+                    btn.style.setProperty('justify-content', 'center', 'important');
+                    btn.style.setProperty('box-shadow', '0px 8px 20px rgba(0,0,0,0.5)', 'important');
+                    btn.style.setProperty('border', 'none', 'important');
+                    btn.style.setProperty('transition', 'transform 0.2s', 'important');
+                    
+                    // Add hover pop effect
+                    btn.onmouseover = function() { this.style.transform = "scale(1.1)"; }
+                    btn.onmouseout = function() { this.style.transform = "scale(1.0)"; }
+                    
+                    // 2. Erase the annoying Streamlit dropdown arrow SVG
+                    const svg = btn.querySelector('svg');
+                    if (svg) svg.style.setProperty('display', 'none', 'important');
+                    
+                    // 3. Make the Robot text perfectly centered and large
+                    const p = btn.querySelector('p');
+                    if (p) {
+                        p.style.setProperty('font-size', '38px', 'important');
+                        p.style.setProperty('margin', '0', 'important');
+                    }
+                    
+                    // 4. Rip the container out of the layout and float it perfectly in the bottom right
+                    let container = btn.closest('div[data-testid="stPopover"]');
+                    if (container) {
+                        container.style.setProperty('display', 'block', 'important');
+                        container.style.setProperty('position', 'fixed', 'important');
+                        container.style.setProperty('bottom', '40px', 'important');
+                        container.style.setProperty('right', '40px', 'important');
+                        container.style.setProperty('z-index', '999999', 'important');
+                        container.style.setProperty('width', '70px', 'important');
+                        container.style.setProperty('height', '70px', 'important');
+                    }
+                }
+            });
+        }, 500); // Check every half second until it finds it
+        </script>
+        """, height=0, width=0)
 
         with st.popover("🤖"):
             st.markdown("### ✨ Gemini Financial Assistant")
