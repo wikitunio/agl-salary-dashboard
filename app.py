@@ -371,6 +371,18 @@ def main():
             st.subheader("💧 Salary & Expense Waterfall")
             
             # --- FEATURE 10: High-Resolution Dynamic Sankey Diagram ---
+            
+            # CRITICAL CSS INJECTION: 
+            # This completely removes Plotly's ugly default text-shadow, making the labels ultra-sharp and clean
+            st.markdown("""
+            <style>
+            .sankey-node text {
+                text-shadow: none !important;
+                font-weight: 500 !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
             sankey_tax = month_data['Income Tax']
             sankey_pf = month_data['PF Deduction']
             sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
@@ -378,70 +390,93 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
-            # Use single line labels to stop Plotly from blurring the text with HTML shadows
             sankey_labels = [
-                f"Gross Pay (Rs. {sankey_gross:,.0f})", 
-                f"Income Tax (Rs. {sankey_tax:,.0f})", 
-                f"PF Deduction (Rs. {sankey_pf:,.0f})", 
-                f"Site Living (Rs. {sankey_site:,.0f})", 
-                f"Other Ded. (Rs. {sankey_other:,.0f})", 
-                f"Net Pay (Rs. {sankey_net:,.0f})"
+                f"Gross Pay<br>Rs. {sankey_gross:,.0f}", 
+                f"Net Pay<br>Rs. {sankey_net:,.0f}"
             ]
+            node_colors = ["#1f77b4", "#2ca02c"]
             
-            node_colors = ["#1f77b4", "#d62728", "#ff7f0e", "#8c564b", "#7f7f7f", "#2ca02c"]
-            source = [0, 0, 0, 0, 0]
-            target = [1, 2, 3, 4, 5]
-            value = [sankey_tax, sankey_pf, sankey_site, sankey_other, sankey_net]
-            link_colors = ["rgba(31,119,180,0.3)"] * 5
+            source = []
+            target = []
+            value = []
+            link_colors = []
             
-            current_idx = 6
+            current_idx = 2
+            
+            # 1. Deductions directly from Gross Pay
+            deductions = {
+                "Income Tax": (sankey_tax, "#d62728", "rgba(214, 39, 40, 0.3)"),
+                "PF Deduction": (sankey_pf, "#ff7f0e", "rgba(255, 127, 14, 0.3)"),
+                "Site Living": (sankey_site, "#8c564b", "rgba(140, 86, 75, 0.3)"),
+                "Other Ded.": (sankey_other, "#7f7f7f", "rgba(127, 127, 127, 0.3)")
+            }
+            
+            for name, (val, col, lcol) in deductions.items():
+                if val > 0:
+                    sankey_labels.append(f"{name}<br>Rs. {val:,.0f}")
+                    source.append(0) # From Gross Pay
+                    target.append(current_idx)
+                    value.append(val)
+                    node_colors.append(col)
+                    link_colors.append(lcol)
+                    current_idx += 1
+            
+            # 2. Link Gross Pay to Net Pay
+            source.append(0)
+            target.append(1)
+            value.append(sankey_net)
+            link_colors.append("rgba(44, 160, 44, 0.3)") # Greenish link
+            
+            # 3. Pocket Expenses from Net Pay
             total_logged_exp = 0
-            
-            # Dynamically pull every category from the Excel sheet into the Sankey
             if not curr_exp.empty:
-                cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
+                cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum().sort_values(ascending=False)
                 for cat, val in cat_sums.items():
                     if val > 0:
-                        sankey_labels.append(f"{cat} (Rs. {val:,.0f})")
-                        source.append(5) # Links out of Net Pay
+                        sankey_labels.append(f"{cat}<br>Rs. {val:,.0f}")
+                        source.append(1) # From Net Pay
                         target.append(current_idx)
                         value.append(val)
-                        node_colors.append("#e377c2") # Expense color
-                        link_colors.append("rgba(44,160,44,0.3)") # Greenish link
+                        node_colors.append("#e377c2") # Pink
+                        link_colors.append("rgba(227, 119, 194, 0.3)")
                         total_logged_exp += val
                         current_idx += 1
-            
+                        
+            # 4. Savings from Net Pay
             sankey_sav = max(0, sankey_net - total_logged_exp)
-            sankey_labels.append(f"Savings (Rs. {sankey_sav:,.0f})")
-            source.append(5)
-            target.append(current_idx)
-            value.append(sankey_sav)
-            node_colors.append("#17becf")
-            link_colors.append("rgba(44,160,44,0.3)")
+            if sankey_sav > 0:
+                sankey_labels.append(f"Savings<br>Rs. {sankey_sav:,.0f}")
+                source.append(1)
+                target.append(current_idx)
+                value.append(sankey_sav)
+                node_colors.append("#17becf")
+                link_colors.append("rgba(23, 190, 207, 0.3)")
+            
+            # Dynamic height calculator guarantees nodes never squash vertically
+            dynamic_height = max(550, 150 + len(sankey_labels) * 35)
 
             fig_sankey = go.Figure(data=[go.Sankey(
-                arrangement="snap",
                 node = dict(
-                    pad=25, 
-                    thickness=20, 
-                    line=dict(color="black", width=0.5), 
-                    label=sankey_labels,
-                    color=node_colors
+                    pad = 25, 
+                    thickness = 25, 
+                    line = dict(color = "rgba(0,0,0,0.3)", width = 0.5), 
+                    label = sankey_labels,
+                    color = node_colors
                 ),
                 link = dict(
-                    source=source, 
-                    target=target, 
-                    value=value,
-                    color=link_colors
+                    source = source, 
+                    target = target, 
+                    value = value,
+                    color = link_colors
                 )
             )])
             
-            # Massive margins and strict fonts entirely prevent blurring and cut-offs
+            # Massive margins ensure labels are perfectly visible and never cut off
             fig_sankey.update_layout(
-                title_text="Cash Flow & Pocket Expenses (Sankey)", 
+                title_text="<b>Cash Flow Sankey Diagram</b>", 
                 font=dict(size=13, color="black", family="Arial, sans-serif"),
-                height=650, 
-                margin=dict(l=150, r=150, t=50, b=50),
+                height=dynamic_height, 
+                margin=dict(l=150, r=200, t=50, b=50),
                 plot_bgcolor='white',
                 paper_bgcolor='white'
             )
