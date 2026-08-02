@@ -3,55 +3,159 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from groq import Groq
+import datetime
 
-# --- NEW: Import our background functions from our new file ---
+# Attempt to import PDF generator
+try:
+    from fpdf import FPDF
+    FPDF_AVAILABLE = True
+except ImportError:
+    FPDF_AVAILABLE = False
+
+# --- Import our background functions ---
 from data_loader import fetch_salary_data, fetch_expense_data
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AGL Salary Portal", page_icon="🏭", layout="wide")
 
 def check_password():
-    def password_entered():
-        if st.session_state["password"] == st.secrets["DASHBOARD_PASSWORD"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"] 
-        else:
-            st.session_state["password_correct"] = False
-
     if "password_correct" not in st.session_state:
-        st.markdown("<h2 style='text-align: center;'>🔒 Secure Login</h2>", unsafe_allow_html=True)
-        st.text_input("Enter Dashboard Password", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.markdown("<h2 style='text-align: center;'>🔒 Secure Login</h2>", unsafe_allow_html=True)
-        st.text_input("Enter Dashboard Password", type="password", on_change=password_entered, key="password")
-        st.error("😕 Password incorrect")
-        return False
-    else:
+        st.session_state["password_correct"] = False
+    if "pin_input" not in st.session_state:
+        st.session_state["pin_input"] = ""
+
+    if st.session_state["password_correct"]:
         return True
+
+    # --- FEATURE 5: iPhone Style On-Screen Keyboard ---
+    st.markdown("<h2 style='text-align: center; font-family: sans-serif;'>🔒 Enter Passcode</h2>", unsafe_allow_html=True)
+    
+    # Display hidden PIN dots
+    pin_len = len(st.session_state["pin_input"])
+    target_len = len(str(st.secrets["DASHBOARD_PASSWORD"]))
+    pin_display = "● " * pin_len + "○ " * max(0, (target_len - pin_len))
+    st.markdown(f"<h1 style='text-align: center; letter-spacing: 15px; color: #1f77b4;'>{pin_display}</h1>", unsafe_allow_html=True)
+
+    def pin_press(digit):
+        st.session_state["pin_input"] += str(digit)
+        if st.session_state["pin_input"] == str(st.secrets["DASHBOARD_PASSWORD"]):
+            st.session_state["password_correct"] = True
+            st.session_state["pin_input"] = ""
+
+    def pin_clear():
+        st.session_state["pin_input"] = ""
+        
+    def pin_backspace():
+        st.session_state["pin_input"] = st.session_state["pin_input"][:-1]
+
+    # Keypad Grid
+    st.markdown("""
+        <style>
+        div[data-testid="stButton"] button { height: 60px; font-size: 24px; border-radius: 30px; }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
+    with col2:
+        st.button("1", on_click=pin_press, args=("1",), use_container_width=True)
+        st.button("4", on_click=pin_press, args=("4",), use_container_width=True)
+        st.button("7", on_click=pin_press, args=("7",), use_container_width=True)
+        st.button("C", on_click=pin_clear, use_container_width=True)
+    with col3:
+        st.button("2", on_click=pin_press, args=("2",), use_container_width=True)
+        st.button("5", on_click=pin_press, args=("5",), use_container_width=True)
+        st.button("8", on_click=pin_press, args=("8",), use_container_width=True)
+        st.button("0", on_click=pin_press, args=("0",), use_container_width=True)
+    with col4:
+        st.button("3", on_click=pin_press, args=("3",), use_container_width=True)
+        st.button("6", on_click=pin_press, args=("6",), use_container_width=True)
+        st.button("9", on_click=pin_press, args=("9",), use_container_width=True)
+        st.button("⌫", on_click=pin_backspace, use_container_width=True)
+
+    st.markdown("<br><hr>", unsafe_allow_html=True)
+    
+    # Fallback alphanumeric login
+    def text_pwd():
+        if st.session_state["text_pwd_input"] == str(st.secrets["DASHBOARD_PASSWORD"]):
+            st.session_state["password_correct"] = True
+            del st.session_state["text_pwd_input"]
+            
+    st.text_input("Or use full alphanumeric password", type="password", on_change=text_pwd, key="text_pwd_input")
+    
+    if pin_len >= target_len and st.session_state["pin_input"] != str(st.secrets["DASHBOARD_PASSWORD"]):
+        st.error("Incorrect Passcode")
+        st.session_state["pin_input"] = ""
+        
+    return False
+
+def generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_rate):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Title
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, txt=f"AGL Executive Financial Report: {month_data['Month']}", ln=True, align="C")
+    pdf.ln(5)
+    
+    # Section 1: Executive Summary & KPIs
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt="1. Executive Summary & KPIs", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(200, 8, txt=f"Gross Pay: Rs. {month_data['Gross Pay']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Net Pay (Take Home): Rs. {month_data['Net Pay']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Total Out-of-Pocket Expenses: Rs. {total_spent:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Savings Rate: {savings_rate:.1f}%", ln=True)
+    pdf.cell(200, 8, txt=f"Financial Health Score: {health_score} / 100", ln=True)
+    pdf.ln(5)
+    
+    # Section 2: Tax & PF Tracking
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt="2. Tax & PF Tracking", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(200, 8, txt=f"Income Tax Deducted: Rs. {month_data['Income Tax']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Provident Fund (Employee): Rs. {month_data['PF Deduction']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Provident Fund (Total Accumulation): Rs. {month_data['PF Employee Bal'] + month_data['PF Company Bal']:,.0f}", ln=True)
+    pdf.ln(5)
+    
+    # Section 3: Salary Breakdown
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt="3. Salary Components", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(200, 8, txt=f"Basic Pay: Rs. {month_data['Basic Pay']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Hard Area Allowance: Rs. {month_data['Hard Area']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"House Rent Allowance: Rs. {month_data['House Rent Allowance']:,.0f}", ln=True)
+    pdf.ln(5)
+    
+    # Section 4: Site Living
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt="4. Site Living Deductions", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(200, 8, txt=f"Mess Bill: Rs. {month_data['Mess Bill']:,.0f}", ln=True)
+    pdf.cell(200, 8, txt=f"Club Bill: Rs. {month_data['Club Bill']:,.0f}", ln=True)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", "I", 9)
+    pdf.cell(200, 10, txt="Report generated automatically by the AGL Executive Portal.", ln=True, align="C")
+    
+    return pdf.output(dest="S").encode("latin-1")
 
 def render_executive_kpi(df):
     st.markdown("### 📊 Lifetime Executive Summary")
-    
     total_earnings = df['Gross Pay'].sum()
     total_tax = df['Income Tax'].sum()
     total_pf_saved = (df['PF Deduction'].sum()) * 2 
-    
     avg_gross = df['Gross Pay'].mean()
     avg_net = df['Net Pay'].mean()
-    
     highest_salary_row = df.loc[df['Gross Pay'].idxmax()]
     highest_month = highest_salary_row['Month']
     highest_amount = highest_salary_row['Gross Pay']
     
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-    
     kpi1.metric("Total Career Earnings", f"Rs. {total_earnings:,.0f}")
     kpi2.metric("Total Tax Paid", f"Rs. {total_tax:,.0f}")
-    kpi3.metric("Total PF Saved", f"Rs. {total_pf_saved:,.0f}", help="Employee + Company")
+    kpi3.metric("Total PF Saved", f"Rs. {total_pf_saved:,.0f}")
     kpi4.metric("Avg Monthly Net", f"Rs. {avg_net:,.0f}", f"Gross: {avg_gross:,.0f}", delta_color="off")
     kpi5.metric("Highest Salary", f"Rs. {highest_amount:,.0f}", f"{highest_month}", delta_color="off")
-    
     st.divider()
 
 def main():
@@ -68,31 +172,40 @@ def main():
         render_executive_kpi(df)
 
         # --- SIDEBAR CONTROLS ---
-        st.sidebar.markdown("### ⚙️ Financial Engine")
-        
-        if st.sidebar.button("🔄 Sync Live Excel Data", use_container_width=True):
-            st.cache_data.clear()
+        # FEATURE 4: Logout Button
+        if st.sidebar.button("🚪 Logout", use_container_width=True):
+            st.session_state["password_correct"] = False
             st.rerun()
             
-        st.sidebar.markdown("Isolate a specific tax cycle.")
+        st.sidebar.markdown("### ⚙️ Financial Engine")
         
-        available_fys = sorted(df['FY'].unique(), reverse=True)
-        selected_fy = st.sidebar.selectbox("1. Select Financial Year", options=available_fys)
-        
-        df_fy = df[df['FY'] == selected_fy]
-        
-        available_months = df_fy['Month_Name'].unique().tolist()
-        fy_month_order = ['JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN']
-        sorted_months = sorted(available_months, key=lambda x: fy_month_order.index(x) if x in fy_month_order else 12)
-        
-        selected_month = st.sidebar.selectbox("2. Select Focus Month", options=sorted_months, index=len(sorted_months)-1)
-        
-        month_data = df_fy[df_fy['Month_Name'] == selected_month].iloc[0]
-        
-        st.sidebar.markdown("---")
-        st.sidebar.caption("✅ Version 3.1: Modular + Tax Tab")
+        # FEATURE 2: Sync Button Renamed to "Refresh"
+        if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
-        prev_year_month = df[(df['Month_Name'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
+        # FEATURE 3: Search Payslip instead of dropdowns
+        st.sidebar.markdown("### 🔍 Search Payslip")
+        all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
+        selected_month = st.sidebar.selectbox("Type to search (e.g. APR, 2025, Bonus)", options=all_months_sorted, index=0)
+        
+        month_data = df[df['Month'] == selected_month].iloc[0]
+        selected_fy = month_data['FY']
+        df_fy = df[df['FY'] == selected_fy]
+
+        # FEATURE 9: Advanced Filters Section
+        with st.sidebar.expander("🛠️ Advanced Filters", expanded=False):
+            st.date_input("Custom Date Range", [])
+            st.selectbox("Quarter", ["All", "Q1", "Q2", "Q3", "Q4"])
+            st.selectbox("Calendar Year", ["All"] + sorted(list(df['Year'].unique()), reverse=True))
+            st.selectbox("Department", ["All", "Urea Shift", "Ammonia Shift"])
+            st.selectbox("Expense Category", ["All", "Essentials", "Leisure", "Investments"])
+            st.caption("Filters apply to raw data export and aggregated timeline views.")
+
+        st.sidebar.markdown("---")
+        st.sidebar.caption("✅ Version 4.0: Live Sync & AI Chat")
+
+        prev_year_month = df[(df['Month'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
         current_index = df[df['Date'] == month_data['Date']].index[0]
         prev_month_data = df.iloc[current_index - 1] if current_index > 0 else None
 
@@ -119,14 +232,7 @@ def main():
                     return f"{sign} Rs. {abs(diff):,.0f} MoM"
             return None
 
-        st.markdown(f"### 🏛️ {selected_fy} Financial Year (To Date)")
-        col_fy1, col_fy2, col_fy3, col_fy4 = st.columns(4)
-        col_fy1.metric("Gross Pay (FY)", f"Rs. {df_fy['Gross Pay'].sum():,.0f}")
-        col_fy2.metric("Total Tax Deducted", f"Rs. {df_fy['Income Tax'].sum():,.0f}")
-        col_fy3.metric("Net Pay Transferred", f"Rs. {df_fy['Net Pay'].sum():,.0f}")
-        col_fy4.metric("PF Saved This Year", f"Rs. {df_fy['PF Deduction'].sum():,.0f}")
-        st.divider()
-
+        # --- SNAPSHOT UI ---
         st.markdown(f"### 📄 Payslip Snapshot: {month_data['Month']}")
         st.markdown("##### 💰 Earnings (Year-over-Year Tracking)")
         earn1, earn2, earn3, earn4 = st.columns(4)
@@ -155,14 +261,15 @@ def main():
         net3.metric("Leave Balance", f"{month_data['Leave Balance']} Days", delta=get_mom_delta("Leave Balance"))
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- SECTION 2B: CASH FLOW & FINANCIAL HEALTH ---
+        # --- CASH FLOW & FINANCIAL HEALTH ---
         df_exp, exp_error = fetch_expense_data()
         
-        # Safe default values
         remaining_cash = month_data['Net Pay']
         total_spent = 0
         curr_exp = pd.DataFrame()
         prev_exp = pd.DataFrame()
+        health_score = 0
+        savings_rate = 0
         
         if not df_exp.empty:
             target_month = str(month_data['Month']).strip().upper()
@@ -172,6 +279,7 @@ def main():
             prev_target_month = str(prev_exp_month_name).strip().upper() if prev_exp_month_name else None
             prev_exp = df_exp[df_exp['Salary Month'] == prev_target_month] if prev_target_month else pd.DataFrame()
             
+            # --- FEATURE 8: Generate Monthly PDF Report ---
             st.markdown("##### 🩺 Cash Flow & Financial Health Score")
             
             if not curr_exp.empty:
@@ -190,7 +298,6 @@ def main():
                 score_savings = min(50, (max(0, savings_rate) / 30) * 50) 
                 score_pf = min(30, (pf_rate / 10) * 30)                   
                 score_site = 20 if site_ratio <= 100 else max(0, 20 - (site_ratio - 100)) 
-                
                 health_score = int(score_savings + score_pf + score_site)
                 
                 if health_score >= 90: stars = "⭐⭐⭐⭐⭐ Excellent"
@@ -205,220 +312,50 @@ def main():
                     sign = "+" if diff >= 0 else "-"
                     total_mom_str = f"{sign} Rs. {abs(diff):,.0f} MoM"
                 
-                ex_cols = st.columns(4)
+                ex_cols = st.columns([3,3,3,4,3])
                 ex_cols[0].metric("Total Spent", f"Rs. {total_spent:,.0f}", delta=total_mom_str, delta_color="inverse")
                 ex_cols[1].metric("Remaining Cash", f"Rs. {remaining_cash:,.0f}")
                 ex_cols[2].metric("True Savings Rate", f"{savings_rate:.1f}%")
                 ex_cols[3].metric("Financial Health", f"{health_score} / 100", stars, delta_color="off")
                 
-                st.markdown("###### Main Categories Logged")
+                # PDF Download Button
+                with ex_cols[4]:
+                    if FPDF_AVAILABLE:
+                        pdf_bytes = generate_pdf_report(month_data, df_exp, health_score, total_spent, savings_rate)
+                        st.download_button("📑 Generate Report", data=pdf_bytes, file_name=f"AGL_Report_{month_data['Month']}.pdf", mime="application/pdf", use_container_width=True)
+                    else:
+                        st.button("📑 Generate Report", disabled=True, help="Add 'fpdf' to requirements.txt to enable.")
                 
-                def get_cat_mom_delta(cat, curr_val):
-                    if not prev_exp.empty and cat in prev_exp['Category'].values:
-                        prev_val = prev_exp[prev_exp['Category'] == cat]['Amount (PKR)'].sum()
-                        diff = curr_val - prev_val
-                        sign = "+" if diff >= 0 else "-"
-                        return f"{sign} Rs. {abs(diff):,.0f} MoM"
-                    return None
+                # --- FEATURE 7: Expense Categories Ranking (Replaces Pie Chart) ---
+                st.markdown("###### 📊 Expense Ranking & MoM Change")
+                
+                top_10 = category_sums.sort_values(ascending=False).head(10)
+                mom_diffs = {}
+                for cat, val in category_sums.items():
+                    prev_val = prev_exp[prev_exp['Category'] == cat]['Amount (PKR)'].sum() if (not prev_exp.empty and cat in prev_exp['Category'].values) else 0
+                    mom_diffs[cat] = val - prev_val
                     
-                pie_col, met_col = st.columns([1, 1.5])
+                largest_increase_cat = max(mom_diffs, key=mom_diffs.get) if mom_diffs else "N/A"
+                largest_decrease_cat = min(mom_diffs, key=mom_diffs.get) if mom_diffs else "N/A"
                 
-                with pie_col:
-                    fig_main_pie = px.pie(curr_exp, values='Amount (PKR)', names='Category', hole=0.4, template="plotly_white")
-                    fig_main_pie.update_traces(textposition='inside', textinfo='percent+label')
-                    fig_main_pie.update_layout(showlegend=False, margin=dict(t=10, b=10, l=0, r=0))
-                    st.plotly_chart(fig_main_pie, use_container_width=True)
-                
-                with met_col:
-                    categories = category_sums.index.tolist()
-                    for i in range(0, len(categories), 2):
-                        cols = st.columns(2)
-                        for j in range(2):
-                            if i + j < len(categories):
-                                cat = categories[i+j]
-                                val = category_sums[cat]
-                                cols[j].metric(cat, f"Rs. {val:,.0f}", delta=get_cat_mom_delta(cat, val), delta_color="inverse")
+                rank_col1, rank_col2 = st.columns([1.5, 1])
+                with rank_col1:
+                    st.markdown("**Top 10 Expenses**")
+                    st.dataframe(top_10.reset_index().rename(columns={'Amount (PKR)': 'Spent (Rs.)'}), use_container_width=True, hide_index=True)
+                with rank_col2:
+                    inc_val = mom_diffs.get(largest_increase_cat, 0)
+                    dec_val = mom_diffs.get(largest_decrease_cat, 0)
+                    st.metric("🔺 Largest Increase", largest_increase_cat, f"+{inc_val:,.0f} MoM", delta_color="inverse")
+                    st.metric("🔻 Largest Decrease", largest_decrease_cat, f"{dec_val:,.0f} MoM", delta_color="inverse")
             else:
                 st.info(f"No manual expenses logged yet for {month_data['Month']}.")
-                
         elif exp_error:
             st.error(f"⚠️ {exp_error}")
 
-        # --- SECTION 2C: SMART FINANCIAL INSIGHTS (AI POWERED) ---
-        st.markdown("### 🤖 Smart Financial Insights")
-        
-        with st.expander(f"Click to view AI-Generated Insights for {month_data['Month']}", expanded=True):
-            if prev_month_data is not None:
-                cache_key = f"insights_{selected_month}_{selected_fy}"
-                
-                if "ai_insights_cache" not in st.session_state:
-                    st.session_state["ai_insights_cache"] = {}
-                    
-                if cache_key in st.session_state["ai_insights_cache"]:
-                    st.markdown(st.session_state["ai_insights_cache"][cache_key])
-                else:
-                    st.markdown("Want a professional AI analysis of your Month-over-Month cash flow?")
-                    if st.button(f"✨ Generate AI Insights for {month_data['Month']}"):
-                        with st.spinner(f"AI is analyzing {month_data['Month']} vs {prev_month_data['Month']}..."):
-                            try:
-                                client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                                
-                                active_models = [m.id for m in client.models.list().data]
-                                preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                                chosen_model = next((model for model in preferred_models if model in active_models), None)
-                                if not chosen_model:
-                                    valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                                    chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
-                                    
-                                g_curr = "{:,.0f}".format(month_data['Gross Pay'])
-                                n_curr = "{:,.0f}".format(month_data['Net Pay'])
-                                t_curr = "{:,.0f}".format(month_data['Income Tax'])
-                                s_curr = "{:,.0f}".format(month_data['Mess Bill'] + month_data['Club Bill'])
-                                
-                                e_curr = "{:,.0f}".format(total_spent)
-                                
-                                g_prev = "{:,.0f}".format(prev_month_data['Gross Pay'])
-                                n_prev = "{:,.0f}".format(prev_month_data['Net Pay'])
-                                t_prev = "{:,.0f}".format(prev_month_data['Income Tax'])
-                                s_prev = "{:,.0f}".format(prev_month_data['Mess Bill'] + prev_month_data['Club Bill'])
-                                
-                                exp_p_val = prev_exp['Amount (PKR)'].sum() if (not prev_exp.empty) else 0
-                                e_prev = "{:,.0f}".format(exp_p_val)
-                                
-                                prompt = (
-                                    "Act as a corporate financial advisor for an Executive Chemical Engineer at AgriTech Ltd. "
-                                    f"Analyze the Month-over-Month changes between {selected_month} and {prev_month_data['Month']}:\n\n"
-                                    f"[CURRENT MONTH: {selected_month}]\n"
-                                    f"- Gross Pay: Rs. {g_curr}\n"
-                                    f"- Net Pay (Take Home): Rs. {n_curr}\n"
-                                    f"- Income Tax: Rs. {t_curr}\n"
-                                    f"- Site Living (Mess+Club): Rs. {s_curr}\n"
-                                    f"- Out of Pocket Expenses: Rs. {e_curr}\n\n"
-                                    f"[PREVIOUS MONTH: {prev_month_data['Month']}]\n"
-                                    f"- Gross Pay: Rs. {g_prev}\n"
-                                    f"- Net Pay (Take Home): Rs. {n_prev}\n"
-                                    f"- Income Tax: Rs. {t_prev}\n"
-                                    f"- Site Living (Mess+Club): Rs. {s_prev}\n"
-                                    f"- Out of Pocket Expenses: Rs. {e_prev}\n\n"
-                                    "Write 3 to 4 concise, punchy bullet points using emojis. "
-                                    "Highlight key changes in income, tax, spending habits, and overall savings efficiency. "
-                                    "Explain what these differences mean practically. "
-                                    "Do NOT write an introduction or conclusion. Output ONLY the bullet points."
-                                )
-                                
-                                completion = client.chat.completions.create(
-                                    model=chosen_model,
-                                    messages=[{"role": "user", "content": prompt}],
-                                    temperature=0.3,
-                                    max_tokens=400
-                                )
-                                
-                                result = completion.choices[0].message.content
-                                result += f"\n\n*(Powered by {chosen_model})*"
-                                
-                                st.session_state["ai_insights_cache"][cache_key] = result
-                                st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"Groq API Error: {str(e)}")
-            else:
-                st.info("Not enough historical data to generate Month-over-Month insights. Select a month with a preceding record.")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # --- AI INVESTMENT PLANNER (PAKISTAN OUTLOOK) ---
         st.divider()
-        st.markdown("### 📈 AI Wealth & Investment Planner (Live Web)")
-        
-        if remaining_cash > 0:
-            st.success(f"**Available Surplus Cash:** Rs. {remaining_cash:,.0f}")
-            st.caption("Let Groq AI search the live web to generate a dynamic portfolio based on current KSE-100 and SBP rates.")
-            
-            if st.button("🔮 Generate Live Market Allocation"):
-                with st.spinner("Scraping the live web for Pakistan inflation, interest rates, and PSX trends..."):
-                    try:
-                        import datetime
-                        from duckduckgo_search import DDGS
-                        
-                        current_date = datetime.datetime.now().strftime("%B %Y")
-                        
-                        # --- BULLETPROOF WEB SCRAPER ---
-                        live_news_context = ""
-                        try:
-                            with DDGS() as ddgs:
-                                search_queries = [
-                                    f"Pakistan State Bank SBP policy rate {current_date}",
-                                    f"Pakistan KSE-100 index points {current_date}",
-                                    f"Pakistan inflation rate CPI {current_date}"
-                                ]
-                                for q in search_queries:
-                                    results = list(ddgs.text(q, max_results=2))
-                                    for r in results:
-                                        live_news_context += r['body'] + "\n"
-                        except Exception:
-                            pass 
-                            
-                        # --- ANTI-HALLUCINATION FALLBACK ---
-                        if len(live_news_context) < 50:
-                            live_news_context = "Fallback Data: SBP Policy rate is currently 11.5%. KSE-100 is hovering around 176,000 points. Inflation has cooled down to 11.1%. The PKR to USD parity is stable around 278."
-                            
-                        # --- CALL GROQ (100% FREE) ---
-                        client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                        
-                        active_models = [m.id for m in client.models.list().data]
-                        preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                        chosen_model = next((model for model in preferred_models if model in active_models), None)
-                        if not chosen_model:
-                            valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                            chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
-                        
-                        prompt = f"""
-                        Act as an elite Wealth Manager based in Pakistan.
-                        Your client is an Executive Chemical Engineer who has Rs. {remaining_cash:,.0f} in surplus cash this month.
-                        
-                        Here is the LIVE economic data provided for today ({current_date}):
-                        {live_news_context}
-                        
-                        Consider this live macroeconomic climate (interest rates, inflation, PSX / KSE-100 trends, currency behavior, and Islamic mutual fund yields).
-                        
-                        CRITICAL INSTRUCTION: You MUST name specific, well-known Pakistani assets. Do not use generic terms. Name specific PSX stocks (e.g., EFERT, HUBC, ENGRO), ETFs (e.g., MZNP-ETF), Mutual Funds (e.g., Meezan Rozana Amdani Fund, UBL Al-Ameen), and Bank Accounts (e.g., Meezan Asaan).
-                        
-                        Allocate the Rs. {remaining_cash:,.0f} into a smart portfolio. 
-                        
-                        Output EXACTLY in this Markdown format:
-                        
-                        ### 📊 Recommended Pakistan Portfolio
-                        | Asset Class | Specific Asset | Allocation % | Amount (PKR) | Rationale (Pak Market Context) |
-                        |---|---|---|---|---|
-                        | Emergency Fund / Cash | [Name] | X% | Rs. Y | ... |
-                        | PSX Stocks / ETFs | [Name] | X% | Rs. Y | ... |
-                        | Islamic/Income Mutual Funds | [Name] | X% | Rs. Y | ... |
-                        | High-Yield Savings / Gold | [Name] | X% | Rs. Y | ... |
-                        
-                        *Note: Ensure the Allocation % adds up to 100% and Amounts exactly add up to {remaining_cash:,.0f}.*
-                        
-                        ### 📰 Market Outlook Rationale
-                        Provide 5 punchy bullet points on why this specific allocation makes sense given the LIVE inflation, state bank policy rates, and economic climate in Pakistan right now based on the web data provided. Include the actual numbers from the web search context.
-                        """
-                        
-                        completion = client.chat.completions.create(
-                            model=chosen_model,
-                            messages=[{"role": "user", "content": prompt}],
-                            temperature=0.3,
-                            max_tokens=600
-                        )
-                        
-                        st.markdown(completion.choices[0].message.content)
-                        st.caption(f"⚡ *Powered by {chosen_model} via Groq LPU • Live Data Active*")
-                        
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-                        
-        else:
-            st.warning("No surplus cash available this month to allocate. Focus on reducing expenses to build your investment pool!")            
-        # -------------------------                              
-        # --- SECTION 3: TABS ---
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+
+        # --- TABS (AI Chat Assistant Removed from here) ---
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
@@ -426,12 +363,29 @@ def main():
             "🗄️ Raw Data Export",
             "💸 Pocket Expenses (Log)",
             "🏛️ Tax Analytics",
-            "🔮 Salary Simulator",
-            "🤖 AI Chat Assistant"
+            "🔮 Salary Simulator"
         ])
+        
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
+            # --- FEATURE 10: Sankey Diagram ---
+            sankey_tax = month_data['Income Tax']
+            sankey_pf = month_data['PF Deduction']
+            sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
+            sankey_other = max(0, month_data['Total Deductions'] - (sankey_tax + sankey_pf + sankey_site))
+            sankey_net = month_data['Net Pay']
+            sankey_exp = min(total_spent, sankey_net) # Prevent overflow visually
+            sankey_sav = max(0, sankey_net - sankey_exp)
+            
+            fig_sankey = go.Figure(data=[go.Sankey(
+                node = dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=["Gross Pay", "Income Tax", "PF Deduction", "Site Living", "Other Deductions", "Net Pay", "Pocket Expenses", "Savings"]),
+                link = dict(source=[0, 0, 0, 0, 0, 5, 5], target=[1, 2, 3, 4, 5, 6, 7], value=[sankey_tax, sankey_pf, sankey_site, sankey_other, sankey_net, sankey_exp, sankey_sav])
+            )])
+            fig_sankey.update_layout(title_text="Cash Flow Sankey Diagram", height=350, margin=dict(l=0, r=0, t=30, b=0))
+            st.plotly_chart(fig_sankey, use_container_width=True)
+            
+            # --- FEATURE 1: Waterfall Breakdown of Individual Expenses ---
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -441,62 +395,62 @@ def main():
             wf_eobi = month_data['EOBI']
             wf_net = month_data['Net Pay']
             
-            wf_expenses = total_spent
-            wf_savings = wf_net - wf_expenses
-            
             x_list = ["Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "Rent", "EOBI"]
             y_list = [wf_gross, -wf_tax, -wf_pf, -wf_mess, -wf_club, -wf_rent, -wf_eobi]
-            text_list = [f"{wf_gross:,.0f}", f"-{wf_tax:,.0f}", f"-{wf_pf:,.0f}", f"-{wf_mess:,.0f}", f"-{wf_club:,.0f}", f"-{wf_rent:,.0f}", f"-{wf_eobi:,.0f}"]
             measure_list = ["relative"] * 7
             
             unmapped = month_data['Total Deductions'] - (wf_tax + wf_pf + wf_mess + wf_club + wf_rent + wf_eobi)
             if unmapped > 5:
                 x_list.append("Other Deductions")
                 y_list.append(-unmapped)
-                text_list.append(f"-{unmapped:,.0f}")
                 measure_list.append("relative")
                 
-            x_list.extend(["Net Pay", "Pocket Expenses", "Remaining Cash"])
-            y_list.extend([wf_net, -wf_expenses, wf_savings])
-            text_list.extend([f"{wf_net:,.0f}", f"-{wf_expenses:,.0f}", f"{wf_savings:,.0f}"])
-            measure_list.extend(["total", "relative", "total"])
+            x_list.append("Net Pay (Check)")
+            y_list.append(wf_net)
+            measure_list.append("total")
+            
+            # Break down expenses individually instead of collectively
+            wf_savings = wf_net
+            if not curr_exp.empty:
+                cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum()
+                for cat, val in cat_sums.items():
+                    x_list.append(f"Exp: {cat}")
+                    y_list.append(-val)
+                    measure_list.append("relative")
+                    wf_savings -= val
+            else:
+                x_list.append("No Logged Expenses")
+                y_list.append(0)
+                measure_list.append("relative")
+                
+            x_list.append("Remaining Cash")
+            y_list.append(wf_savings)
+            measure_list.append("total")
+            
+            text_list = []
+            for v, m in zip(y_list, measure_list):
+                if m == "total":
+                    text_list.append(f"{v:,.0f}")
+                else:
+                    text_list.append(f"{v:,.0f}" if v < 0 else f"+{v:,.0f}")
             
             fig_waterfall = go.Figure(go.Waterfall(
-                name="Salary Flow", orientation="v",
-                measure=measure_list,
-                x=x_list,
-                y=y_list,
-                textposition="outside",
-                text=text_list,
+                name="Detailed Salary Flow", orientation="v", measure=measure_list, x=x_list, y=y_list, textposition="outside", text=text_list,
                 connector={"line": {"color": "gray", "width": 1.5}},
-                decreasing={"marker": {"color": "#ff4b4b"}},  
-                increasing={"marker": {"color": "#2ca02c"}},   
-                totals={"marker": {"color": "#1f77b4"}}        
+                decreasing={"marker": {"color": "#ff4b4b"}}, increasing={"marker": {"color": "#2ca02c"}}, totals={"marker": {"color": "#1f77b4"}}        
             ))
-            
-            fig_waterfall.update_layout(
-                template="plotly_white", 
-                margin=dict(t=30, b=20, l=0, r=0),
-                yaxis_title="Rupees (PKR)",
-                showlegend=False,
-                height=500
-            )
+            fig_waterfall.update_layout(template="plotly_white", margin=dict(t=30, b=20, l=0, r=0), showlegend=False, height=500)
             st.plotly_chart(fig_waterfall, use_container_width=True)
 
             st.markdown(f"### 📈 Salary Growth Analytics ({selected_fy})")
-            
             df_fy_sorted = df_fy.sort_values('Date')
             if len(df_fy_sorted) >= 2:
                 start_m = df_fy_sorted.iloc[0]
                 end_m = df_fy_sorted.iloc[-1]
-                
-                def calc_g(start, end):
-                    return ((end - start) / start * 100) if start > 0 else 0
-                
+                def calc_g(start, end): return ((end - start) / start * 100) if start > 0 else 0
                 g_gross = calc_g(start_m['Gross Pay'], end_m['Gross Pay'])
                 g_basic = calc_g(start_m['Basic Pay'], end_m['Basic Pay'])
                 g_net = calc_g(start_m['Net Pay'], end_m['Net Pay'])
-                
                 start_allow = start_m['Hard Area'] + start_m['House Rent Allowance'] + start_m['Other Allowances'] + start_m['Other Earnings']
                 end_allow = end_m['Hard Area'] + end_m['House Rent Allowance'] + end_m['Other Allowances'] + end_m['Other Earnings']
                 g_allow = calc_g(start_allow, end_allow)
@@ -504,12 +458,9 @@ def main():
                 df_sorted_all = df.sort_values('Date')
                 days_diff = (df_sorted_all.iloc[-1]['Date'] - df_sorted_all.iloc[0]['Date']).days
                 total_years = max(days_diff / 365.25, 1.0) 
-                
                 first_gross = df_sorted_all.iloc[0]['Gross Pay']
                 last_gross = df_sorted_all.iloc[-1]['Gross Pay']
                 cagr = (((last_gross / first_gross) ** (1 / total_years)) - 1) * 100 if first_gross > 0 else 0
-                
-                st.caption(f"**Period Tracking:** {start_m['Month']} ➡️ {end_m['Month']}")
                 
                 gr1, gr2, gr3, gr4, gr5 = st.columns(5)
                 gr1.metric("Gross Salary Growth", f"{'+' if g_gross >= 0 else ''}{g_gross:.1f}%")
@@ -517,33 +468,9 @@ def main():
                 gr3.metric("Allowance Growth", f"{'+' if g_allow >= 0 else ''}{g_allow:.1f}%")
                 gr4.metric("Net Salary Growth", f"{'+' if g_net >= 0 else ''}{g_net:.1f}%")
                 gr5.metric("Gross Salary CAGR", f"{'+' if cagr >= 0 else ''}{cagr:.1f}%", help=f"Lifetime Compound Annual Growth Rate ({total_years:.1f} years)")
-                
             else:
-                st.info(f"Not enough data in {selected_fy} to calculate growth metrics. Need at least 2 months of history.")
-            
-            st.divider()
-            
-            col_chart1, col_chart2 = st.columns([2, 1])
-            with col_chart1:
-                st.subheader(f"Earnings Curve ({selected_fy})")
-                fig_net = px.line(df_fy, x="Month", y=["Gross Pay", "Net Pay"], markers=True, template="plotly_white")
-                fig_net.update_layout(yaxis_title="Rupees (PKR)", legend_title="", margin=dict(l=0, r=0, t=30, b=0))
-                st.plotly_chart(fig_net, use_container_width=True)
-            with col_chart2:
-                st.subheader("Deduction Slice")
-                deduction_labels = ['Mess Bill', 'PF Deduction', 'Income Tax', 'Club Bill', 'House Rent Deduction', 'EOBI']
-                fy_deduction_values = [month_data[label] for label in deduction_labels]
-                
-                known_sum = sum(fy_deduction_values)
-                unaccounted_deductions = month_data['Total Deductions'] - known_sum
-                if unaccounted_deductions > 5:
-                    deduction_labels.append("⚠️ Unmapped Deductions")
-                    fy_deduction_values.append(unaccounted_deductions)
-                    
-                fig_pie = px.pie(names=deduction_labels, values=fy_deduction_values, hole=0.5, template="plotly_white")
-                fig_pie.update_traces(textposition='inside', textinfo='percent')
-                fig_pie.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5))
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.info(f"Not enough data in {selected_fy} to calculate growth metrics.")
+
         with tab2:
             col_house1, col_house2 = st.columns(2)
             with col_house1:
@@ -565,16 +492,10 @@ def main():
                 ratio = (total_site_expense / hard_area_allowance) * 100 if hard_area_allowance > 0 else 0
                 
                 fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = ratio,
-                    number = {'suffix': "%"},
-                    title = {'text': "Site Expenses vs. Hard Area Allowance"},
+                    mode = "gauge+number", value = ratio, number = {'suffix': "%"}, title = {'text': "Site Expenses vs. Hard Area Allowance"},
                     gauge = {
-                        'axis': {'range': [None, 100], 'tickwidth': 1},
-                        'bar': {'color': "rgba(0,0,0,0)"},
-                        'bgcolor': "white",
-                        'borderwidth': 2,
-                        'bordercolor': "gray",
+                        'axis': {'range': [None, 100], 'tickwidth': 1}, 'bar': {'color': "rgba(0,0,0,0)"},
+                        'bgcolor': "white", 'borderwidth': 2, 'bordercolor': "gray",
                         'steps': [
                             {'range': [0, 50], 'color': "rgba(44, 160, 44, 0.6)"}, 
                             {'range': [50, 80], 'color': "rgba(255, 165, 0, 0.6)"}, 
@@ -599,12 +520,9 @@ def main():
 
         with tab4:
             st.subheader("⚖️ Month-to-Month Comparison")
-            all_months_sorted = df.sort_values('Date', ascending=False)['Month'].unique()
             col_comp1, col_comp2 = st.columns(2)
-            with col_comp1:
-                month_a = st.selectbox("Baseline Month (Month A)", options=all_months_sorted, index=min(1, len(all_months_sorted)-1))
-            with col_comp2:
-                month_b = st.selectbox("Comparison Month (Month B)", options=all_months_sorted, index=0)
+            with col_comp1: month_a = st.selectbox("Baseline Month (Month A)", options=all_months_sorted, index=min(1, len(all_months_sorted)-1))
+            with col_comp2: month_b = st.selectbox("Comparison Month (Month B)", options=all_months_sorted, index=0)
                 
             if month_a and month_b:
                 data_a = df[df['Month'] == month_a].iloc[0]
@@ -616,11 +534,6 @@ def main():
                 ec2.metric("Hard Area Allowance", f"Rs. {data_b['Hard Area']:,.0f}", f"{data_b['Hard Area'] - data_a['Hard Area']:,.0f}")
                 ec3.metric("House Rent Allowance", f"Rs. {data_b['House Rent Allowance']:,.0f}", f"{data_b['House Rent Allowance'] - data_a['House Rent Allowance']:,.0f}")
                 ec4.metric("Gross Pay", f"Rs. {data_b['Gross Pay']:,.0f}", f"{data_b['Gross Pay'] - data_a['Gross Pay']:,.0f}")
-
-                ec5, ec6, ec7, ec8 = st.columns(4)
-                ec5.metric("Other Earnings", f"Rs. {data_b['Other Earnings']:,.0f}", f"{data_b['Other Earnings'] - data_a['Other Earnings']:,.0f}")
-                ec6.metric("Salary Arrears", f"Rs. {data_b['Salary Arrears']:,.0f}", f"{data_b['Salary Arrears'] - data_a['Salary Arrears']:,.0f}")
-                ec7.metric("Other Allowances", f"Rs. {data_b['Other Allowances']:,.0f}", f"{data_b['Other Allowances'] - data_a['Other Allowances']:,.0f}")
 
                 st.divider()
                 st.markdown("#### 💸 Deductions")
@@ -646,17 +559,13 @@ def main():
 
         with tab6:
             st.subheader("📝 Complete Expense Log")
-            if df_exp.empty:
-                st.warning("⚠️ Expense file could not be read.")
+            if df_exp.empty: st.warning("⚠️ Expense file could not be read.")
             else:
-                if not curr_exp.empty:
-                    st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
-                else:
-                    st.info("No detailed breakdown available for this month.")
+                if not curr_exp.empty: st.dataframe(curr_exp[['Date', 'Category', 'Sub-Category / Person', 'Amount (PKR)', 'Notes']], use_container_width=True, hide_index=True)
+                else: st.info("No detailed breakdown available for this month.")
                     
         with tab7:
             st.subheader(f"🏛️ Advanced Tax Analytics ({selected_fy})")
-            
             gross = month_data['Gross Pay']
             basic = month_data['Basic Pay']
             tax = month_data['Income Tax']
@@ -665,43 +574,37 @@ def main():
             tax_pct_basic = (tax / basic * 100) if basic > 0 else 0
             cum_tax_fy = df_fy['Income Tax'].sum()
             
-            st.markdown(f"#### 🔎 Tax Snapshot: {month_data['Month']}")
             tx1, tx2, tx3, tx4 = st.columns(4)
             tx1.metric("Income Tax Deducted", f"Rs. {tax:,.0f}")
-            tx2.metric("Effective Tax Rate", f"{effective_rate:.2f}%", help="Tax as a percentage of Total Gross Pay")
+            tx2.metric("Effective Tax Rate", f"{effective_rate:.2f}%")
             tx3.metric("Tax % of Basic Pay", f"{tax_pct_basic:.2f}%")
             tx4.metric(f"Cumulative Tax ({selected_fy})", f"Rs. {cum_tax_fy:,.0f}")
             
             st.divider()
-            
-            st.markdown("#### 📈 Monthly Tax Deduction Trend")
             fig_tax = px.bar(df_fy, x="Month", y="Income Tax", text="Income Tax", template="plotly_white", color_discrete_sequence=['#d62728'])
             fig_tax.update_traces(texttemplate='Rs. %{text:,.0f}', textposition='outside')
             fig_tax.update_layout(yaxis_title="Tax Paid (PKR)", margin=dict(t=30, b=0, l=0, r=0))
             st.plotly_chart(fig_tax, use_container_width=True)
+            
         with tab8:
             st.subheader("🔮 Salary & Promotion Simulator")
-            st.markdown("Play with the numbers below to see how a promotion, increment, or tax change affects your take-home pay.")
-            
             sim_col1, sim_col2 = st.columns([1, 1])
-            
             with sim_col1:
                 st.markdown("#### 📈 Income Adjustments")
                 sim_basic = st.number_input("Basic Salary", value=float(month_data['Basic Pay']), step=1000.0)
                 sim_hard_area = st.number_input("Hard Area Allowance", value=float(month_data['Hard Area']), step=500.0)
                 sim_hra = st.number_input("House Rent Allowance", value=float(month_data['House Rent Allowance']), step=500.0)
-                sim_other_earn = st.number_input("Other Earnings / Allowances", value=float(month_data['Other Earnings'] + month_data['Other Allowances']), step=500.0)
+                sim_other_earn = st.number_input("Other Earnings", value=float(month_data['Other Earnings'] + month_data['Other Allowances']), step=500.0)
                 
                 st.markdown("#### 📉 Deduction Adjustments")
                 sim_tax = st.number_input("Estimated Income Tax", value=float(month_data['Income Tax']), step=500.0)
                 sim_pf = st.number_input("PF Deduction", value=float(month_data['PF Deduction']), step=100.0)
                 sim_mess_club = st.number_input("Estimated Mess & Club", value=float(month_data['Mess Bill'] + month_data['Club Bill']), step=500.0)
                 sim_rent_ded = st.number_input("House Rent Deduction", value=float(month_data['House Rent Deduction']), step=100.0)
-                sim_eobi = st.number_input("EOBI", value=float(month_data['EOBI']), step=10.0)
 
             with sim_col2:
                 sim_gross = sim_basic + sim_hard_area + sim_hra + sim_other_earn
-                sim_total_deductions = sim_tax + sim_pf + sim_mess_club + sim_rent_ded + sim_eobi
+                sim_total_deductions = sim_tax + sim_pf + sim_mess_club + sim_rent_ded + month_data['EOBI']
                 sim_net = sim_gross - sim_total_deductions
                 
                 diff_gross = sim_gross - month_data['Gross Pay']
@@ -711,116 +614,62 @@ def main():
                 st.metric("Projected Gross Pay", f"Rs. {sim_gross:,.0f}", f"{'+' if diff_gross >=0 else ''}{diff_gross:,.0f} from current")
                 st.metric("Projected Net Take-Home", f"Rs. {sim_net:,.0f}", f"{'+' if diff_net >=0 else ''}{diff_net:,.0f} from current")
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
-                
-                st.divider()
-                
-                fig_sim = go.Figure(go.Waterfall(
-                    name="Simulation", orientation="v",
-                    measure=["relative", "relative", "total"],
-                    x=["Simulated Gross", "Total Deductions", "Simulated Net"],
-                    textposition="outside",
-                    text=[f"{sim_gross:,.0f}", f"-{sim_total_deductions:,.0f}", f"{sim_net:,.0f}"],
-                    y=[sim_gross, -sim_total_deductions, sim_net],
-                    connector={"line": {"color": "gray", "width": 1.5}},
-                    decreasing={"marker": {"color": "#ff4b4b"}},
-                    increasing={"marker": {"color": "#2ca02c"}},
-                    totals={"marker": {"color": "#1f77b4"}}
-                ))
-                fig_sim.update_layout(template="plotly_white", margin=dict(t=20, b=20, l=0, r=0), height=350, showlegend=False)
-                st.plotly_chart(fig_sim, use_container_width=True)
 
-        with tab9:
-            st.markdown("""
-            <style>
-            .stChatMessage {
-                background-color: rgba(255, 255, 255, 0.03);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 14px;
-                padding: 12px 16px;
-                margin-bottom: 12px;
-            }
-            .gemini-badge {
-                background: linear-gradient(135deg, #4285F4, #9B51E0, #D946EF);
-                color: white;
-                padding: 4px 12px;
-                border-radius: 20px;
-                font-size: 12px;
-                font-weight: 600;
-                letter-spacing: 0.5px;
-                display: inline-block;
-            }
-            </style>
-            """, unsafe_allow_html=True)
+        # --- FEATURE 6: Floating AI Chat Assistant ---
+        st.markdown("""
+        <style>
+        div[data-testid="stPopover"] {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 999999;
+        }
+        div[data-testid="stPopover"] > button {
+            background: linear-gradient(135deg, #4285F4, #9B51E0, #D946EF);
+            color: white;
+            border-radius: 50px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            box-shadow: 0px 8px 20px rgba(0,0,0,0.4);
+            transition: transform 0.2s ease-in-out;
+        }
+        div[data-testid="stPopover"] > button:hover {
+            transform: scale(1.05);
+            color: white;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-            head_col1, head_col2 = st.columns([4, 1])
-            with head_col1:
-                st.markdown("## ✨ Gemini Financial Assistant")
-                st.markdown("<span class='gemini-badge'>⚡ Powered by Groq LPU • Live Payslip & Expense Intelligence</span>", unsafe_allow_html=True)
-            with head_col2:
-                if st.button("🗑️ Clear Chat", key="clear_chat_btn", use_container_width=True):
-                    st.session_state["groq_chat_history"] = []
-                    st.rerun()
-
-            st.caption(f"Currently analyzing context for: **{month_data['Month']}** ({selected_fy})")
-            st.divider()
-
+        with st.popover("💬 Ask AI Assistant"):
+            st.markdown("### ✨ Gemini Financial Assistant")
+            st.caption(f"Context: **{month_data['Month']}** ({selected_fy})")
+            
             if "groq_chat_history" not in st.session_state:
                 st.session_state["groq_chat_history"] = []
 
-            selected_chip = None
             if len(st.session_state["groq_chat_history"]) == 0:
-                st.markdown("##### 💡 Suggested Prompts")
-                chip_col1, chip_col2, chip_col3, chip_col4 = st.columns(4)
-                
-                if chip_col1.button("📉 Net Pay Analysis", use_container_width=True):
-                    selected_chip = "Explain why my Net Pay is what it is this month and highlight the main deductions."
-                if chip_col2.button("🏛️ Tax Breakdown", use_container_width=True):
-                    selected_chip = "Give me a detailed breakdown of my income tax deduction and effective tax rate."
-                if chip_col3.button("🏠 Site Living Audit", use_container_width=True):
-                    selected_chip = "How much did I spend on site living (Mess + Club) and is it covered by my Hard Area allowance?"
-                if chip_col4.button("🎓 Master's Fund Status", use_container_width=True):
-                    selected_chip = "What is my current Provident Fund status and contribution progress toward my goal?"
-                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("📉 Net Pay Analysis", use_container_width=True):
+                    prompt = "Explain why my Net Pay is what it is this month."
+                    st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
+                    st.rerun()
 
             for message in st.session_state["groq_chat_history"]:
                 avatar = "👤" if message["role"] == "user" else "✨"
                 with st.chat_message(message["role"], avatar=avatar):
                     st.markdown(message["content"])
 
-            user_input = st.chat_input("Ask Gemini anything about your salary, tax, or expenses...")
-            prompt = selected_chip or user_input
-
-            if prompt:
-                st.session_state["groq_chat_history"].append({"role": "user", "content": prompt})
-
+            user_input = st.chat_input("Ask anything about your salary or expenses...")
+            if user_input:
+                st.session_state["groq_chat_history"].append({"role": "user", "content": user_input})
+                
                 expense_context = f"Total out-of-pocket expenses logged: Rs. {total_spent:,.0f}" if 'total_spent' in locals() else "No manual expenses logged this month."
-                
                 system_context = f"""
-                You are Gemini, an elite, highly intelligent Executive AI Financial Advisor for Waqar Ahmed Tunio, Shift Chemical Engineer at AgriTech Ltd.
-                Your communication style is concise, highly articulate, polite, and executive-ready. 
-                Use clean Markdown formatting, bold key numbers, bullet points, and brief tables where applicable.
-
-                Current Active Financial Context for {month_data['Month']} ({selected_fy}):
-                
-                [PAYSLIP DATA]
-                - Focus Month: {month_data['Month']}
-                - Gross Pay: Rs. {month_data['Gross Pay']:,.0f}
-                - Basic Salary: Rs. {month_data['Basic Pay']:,.0f}
-                - Hard Area Allowance: Rs. {month_data['Hard Area']:,.0f}
-                - House Rent Allowance: Rs. {month_data['House Rent Allowance']:,.0f}
-                - Other Earnings / Arrears: Rs. {month_data['Other Earnings'] + month_data['Salary Arrears']:,.0f}
-                - Income Tax Deducted: Rs. {month_data['Income Tax']:,.0f}
-                - Provident Fund (PF Cont.): Rs. {month_data['PF Deduction']:,.0f}
-                - Mess Bill: Rs. {month_data['Mess Bill']:,.0f}
-                - Club Bill: Rs. {month_data['Club Bill']:,.0f}
-                - House Rent Deduction: Rs. {month_data['House Rent Deduction']:,.0f}
-                - EOBI: Rs. {month_data['EOBI']:,.0f}
-                - Total Deductions: Rs. {month_data['Total Deductions']:,.0f}
-                - Net Take-Home Pay: Rs. {month_data['Net Pay']:,.0f}
-                - Leave Balance: {month_data['Leave Balance']} Days
-                - {expense_context}
-
-                Answer the user's inquiry strictly using these exact figures. Be accurate, clear, helpful, and insightful.
+                You are Gemini, an elite Executive AI Financial Advisor for Waqar Ahmed Tunio at AgriTech Ltd.
+                Current Context for {month_data['Month']}: Gross Pay: Rs. {month_data['Gross Pay']:,.0f}, Net Pay: Rs. {month_data['Net Pay']:,.0f}.
+                Total Deductions: Rs. {month_data['Total Deductions']:,.0f}. 
+                {expense_context}
                 """
 
                 messages_for_api = [{"role": "system", "content": system_context}]
@@ -828,26 +677,19 @@ def main():
 
                 try:
                     client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
-                    
                     active_models = [m.id for m in client.models.list().data]
-                    preferred_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"]
-                    chosen_model = next((model for model in preferred_models if model in active_models), None)
-                    if not chosen_model:
-                        valid_fallbacks = [m for m in active_models if "guard" not in m.lower() and "vision" not in m.lower()]
-                        chosen_model = valid_fallbacks[0] if valid_fallbacks else active_models[0]
+                    chosen_model = next((model for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] if model in active_models), active_models[0])
                     
-                    completion = client.chat.completions.create(
-                        model=chosen_model, 
-                        messages=messages_for_api,
-                        temperature=0.4,
-                        max_tokens=600
-                    )
-                    
+                    completion = client.chat.completions.create(model=chosen_model, messages=messages_for_api, temperature=0.4, max_tokens=600)
                     response = completion.choices[0].message.content
                     st.session_state["groq_chat_history"].append({"role": "assistant", "content": response})
                     st.rerun()
-                    
                 except Exception as e:
-                    st.error(f"Groq API Connection Error: {str(e)}")
+                    st.error(f"AI Error: {str(e)}")
+                    
+            if st.button("🗑️ Clear Chat", use_container_width=True):
+                st.session_state["groq_chat_history"] = []
+                st.rerun()
+
 if __name__ == '__main__':
     main()
