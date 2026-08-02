@@ -4,7 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from groq import Groq
 import datetime
-import streamlit.components.v1 as components
 
 # Attempt to import PDF generator
 try:
@@ -370,7 +369,7 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # --- FEATURE 10: Sankey Diagram ---
+            # --- FEATURE 10: High-Resolution Sankey Diagram ---
             sankey_tax = month_data['Income Tax']
             sankey_pf = month_data['PF Deduction']
             sankey_site = month_data['Mess Bill'] + month_data['Club Bill'] + month_data['House Rent Deduction']
@@ -378,12 +377,48 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_exp = min(total_spent, sankey_net) 
             sankey_sav = max(0, sankey_net - sankey_exp)
+            sankey_gross = month_data['Gross Pay']
+            
+            # High Contrast Labels with Explicit Values
+            sankey_labels = [
+                f"Gross Pay<br>Rs. {sankey_gross:,.0f}", 
+                f"Income Tax<br>Rs. {sankey_tax:,.0f}", 
+                f"PF Deduction<br>Rs. {sankey_pf:,.0f}", 
+                f"Site Living<br>Rs. {sankey_site:,.0f}", 
+                f"Other Ded.<br>Rs. {sankey_other:,.0f}", 
+                f"Net Pay<br>Rs. {sankey_net:,.0f}", 
+                f"Expenses<br>Rs. {sankey_exp:,.0f}", 
+                f"Savings<br>Rs. {sankey_sav:,.0f}"
+            ]
+            
+            # Modern Color Palette
+            node_colors = ["#1f77b4", "#d62728", "#ff7f0e", "#8c564b", "#7f7f7f", "#2ca02c", "#e377c2", "#17becf"]
+            link_colors = ["rgba(31,119,180,0.3)"] * 5 + ["rgba(44,160,44,0.3)"] * 2
             
             fig_sankey = go.Figure(data=[go.Sankey(
-                node = dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=["Gross Pay", "Income Tax", "PF Deduction", "Site Living", "Other Deductions", "Net Pay", "Pocket Expenses", "Savings"]),
-                link = dict(source=[0, 0, 0, 0, 0, 5, 5], target=[1, 2, 3, 4, 5, 6, 7], value=[sankey_tax, sankey_pf, sankey_site, sankey_other, sankey_net, sankey_exp, sankey_sav])
+                arrangement="snap",
+                node = dict(
+                    pad=30, 
+                    thickness=25, 
+                    line=dict(color="rgba(0,0,0,0.5)", width=1), 
+                    label=sankey_labels,
+                    color=node_colors
+                ),
+                link = dict(
+                    source=[0, 0, 0, 0, 0, 5, 5], 
+                    target=[1, 2, 3, 4, 5, 6, 7], 
+                    value=[sankey_tax, sankey_pf, sankey_site, sankey_other, sankey_net, sankey_exp, sankey_sav],
+                    color=link_colors
+                )
             )])
-            fig_sankey.update_layout(title_text="Cash Flow Sankey Diagram", height=350, margin=dict(l=0, r=0, t=30, b=0))
+            
+            # Increased Height & Generous Margins to completely stop blurring and cut-offs
+            fig_sankey.update_layout(
+                title_text="Cash Flow Sankey Diagram", 
+                font=dict(size=14, color="black", family="Arial"),
+                height=600, 
+                margin=dict(l=120, r=120, t=50, b=50) 
+            )
             st.plotly_chart(fig_sankey, use_container_width=True)
             
             # --- FEATURE 1: Waterfall Breakdown of Individual Expenses ---
