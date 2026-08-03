@@ -48,7 +48,7 @@ def delete_local_payslip(index):
         df = df.drop(index)
         df.to_csv(LOCAL_PAYSLIPS_FILE, index=False)
 
-# --- AUTHENTICATION ---
+# --- AUTHENTICATION & LOCKSCREEN ---
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
@@ -58,14 +58,66 @@ def check_password():
     if st.session_state["password_correct"]:
         return True
 
-    # --- FEATURE 5: iPhone Style On-Screen Keyboard ---
+    # --- CSS TO FORCE MOBILE GRID AND PREVENT STACKING ---
+    st.markdown("""
+        <style>
+        /* Force the lock screen layout to remain a horizontal grid on all devices */
+        div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            justify-content: center !important;
+            max-width: 320px !important;
+            margin: 0 auto !important;
+            gap: 10px !important;
+        }
+        div[data-testid="column"] {
+            width: 33.33% !important;
+            flex: 1 1 0% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+        }
+        
+        /* Circular iPhone Buttons */
+        div[data-testid="stButton"] button {
+            height: 75px !important;
+            width: 75px !important;
+            font-size: 28px !important;
+            border-radius: 50% !important;
+            margin: 0 auto 15px auto !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: transparent !important;
+            border: 1.5px solid rgba(128, 128, 128, 0.5) !important;
+            color: inherit !important;
+            transition: background-color 0.1s !important;
+        }
+        div[data-testid="stButton"] button:active {
+            background-color: rgba(128, 128, 128, 0.3) !important;
+        }
+        
+        /* Prevent password dots from wrapping onto multiple lines */
+        .pin-display {
+            letter-spacing: 15px; 
+            white-space: nowrap; 
+            color: #1f77b4; 
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown("<h2 style='text-align: center; font-family: sans-serif; margin-bottom: -10px;'>🔒 Enter Passcode</h2>", unsafe_allow_html=True)
     
-    # Display hidden PIN dots (white-space: nowrap prevents wrapping on mobile)
+    # Display hidden PIN dots
     pin_len = len(st.session_state["pin_input"])
     target_len = len(str(st.secrets["DASHBOARD_PASSWORD"]))
     pin_display = "● " * pin_len + "○ " * max(0, (target_len - pin_len))
-    st.markdown(f"<h1 style='text-align: center; letter-spacing: 10px; white-space: nowrap; color: #1f77b4; margin-bottom: 20px;'>{pin_display}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 class='pin-display'>{pin_display}</h1>", unsafe_allow_html=True)
 
     def pin_press(digit):
         st.session_state["pin_input"] += str(digit)
@@ -79,84 +131,23 @@ def check_password():
     def pin_backspace():
         st.session_state["pin_input"] = st.session_state["pin_input"][:-1]
 
-    # TRUE iPHONE LAYOUT KEYPAD (Bulletproof Mobile CSS Overrides)
-    st.markdown("""
-        <style>
-        /* Force side-by-side on mobile, entirely preventing stacking */
-        div[data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            justify-content: center !important;
-            width: 100% !important;
-            max-width: 320px !important;
-            margin: 0 auto !important;
-            gap: 15px !important;
-        }
-        
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            width: 33.33% !important;
-            flex: 1 1 0% !important;
-            min-width: 0 !important;
-            padding: 0 !important;
-        }
-
-        /* Circular iPhone Buttons */
-        div[data-testid="stButton"] button {
-            height: 80px !important;
-            width: 80px !important;
-            font-size: 32px !important;
-            border-radius: 50% !important;
-            margin: 0 auto !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            background-color: transparent !important;
-            border: 1.5px solid rgba(128, 128, 128, 0.4) !important;
-            color: #333 !important;
-            font-weight: 300 !important;
-            transition: background-color 0.1s !important;
-        }
-        div[data-testid="stButton"] button:active {
-            background-color: rgba(128, 128, 128, 0.3) !important;
-        }
-
-        /* Dark Mode Support */
-        @media (prefers-color-scheme: dark) {
-            div[data-testid="stButton"] button {
-                color: #fff !important;
-                border-color: rgba(255, 255, 255, 0.4) !important;
-            }
-            div[data-testid="stButton"] button:active {
-                background-color: rgba(255, 255, 255, 0.3) !important;
-            }
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # ROW 1
+    # TRUE 3x4 GRID (Forced by CSS to never stack)
     c1, c2, c3 = st.columns(3)
-    c1.button("1", on_click=pin_press, args=("1",), use_container_width=True)
-    c2.button("2", on_click=pin_press, args=("2",), use_container_width=True)
-    c3.button("3", on_click=pin_press, args=("3",), use_container_width=True)
-    
-    # ROW 2
-    c4, c5, c6 = st.columns(3)
-    c4.button("4", on_click=pin_press, args=("4",), use_container_width=True)
-    c5.button("5", on_click=pin_press, args=("5",), use_container_width=True)
-    c6.button("6", on_click=pin_press, args=("6",), use_container_width=True)
-
-    # ROW 3
-    c7, c8, c9 = st.columns(3)
-    c7.button("7", on_click=pin_press, args=("7",), use_container_width=True)
-    c8.button("8", on_click=pin_press, args=("8",), use_container_width=True)
-    c9.button("9", on_click=pin_press, args=("9",), use_container_width=True)
-
-    # ROW 4
-    c10, c11, c12 = st.columns(3)
-    c10.button("C", on_click=pin_clear, use_container_width=True)
-    c11.button("0", on_click=pin_press, args=("0",), use_container_width=True)
-    c12.button("⌫", on_click=pin_backspace, use_container_width=True)
+    with c1:
+        st.button("1", on_click=pin_press, args=("1",), use_container_width=True)
+        st.button("4", on_click=pin_press, args=("4",), use_container_width=True)
+        st.button("7", on_click=pin_press, args=("7",), use_container_width=True)
+        st.button("C", on_click=pin_clear, use_container_width=True)
+    with c2:
+        st.button("2", on_click=pin_press, args=("2",), use_container_width=True)
+        st.button("5", on_click=pin_press, args=("5",), use_container_width=True)
+        st.button("8", on_click=pin_press, args=("8",), use_container_width=True)
+        st.button("0", on_click=pin_press, args=("0",), use_container_width=True)
+    with c3:
+        st.button("3", on_click=pin_press, args=("3",), use_container_width=True)
+        st.button("6", on_click=pin_press, args=("6",), use_container_width=True)
+        st.button("9", on_click=pin_press, args=("9",), use_container_width=True)
+        st.button("⌫", on_click=pin_backspace, use_container_width=True)
 
     st.markdown("<br><hr>", unsafe_allow_html=True)
     
@@ -260,7 +251,6 @@ def main():
                 local_df['FY'] = local_df['Date'].apply(lambda x: f"FY{x.year}-{str(x.year+1)[-2:]}" if x.month >= 7 else f"FY{x.year-1}-{str(x.year)[-2:]}")
                 
                 if not df.empty:
-                    # Merge and let local manual uploads overwrite email fetched data if months clash
                     df = pd.concat([df, local_df], ignore_index=True)
                     df = df.drop_duplicates(subset=['Month'], keep='last')
                     df = df.sort_values('Date', ascending=False).reset_index(drop=True)
@@ -490,6 +480,7 @@ def main():
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
+            # --- FEATURE 10: High-Resolution HTML Style Sankey Diagram ---
             st.markdown("""
             <style>
             .sankey-node text {
@@ -508,7 +499,6 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
-            # Inline Numbers
             sankey_labels = [
                 f"Gross Pay (Rs. {sankey_gross:,.0f})", 
                 f"Net Pay (Rs. {sankey_net:,.0f})"
@@ -618,6 +608,7 @@ def main():
             )
             st.plotly_chart(fig_sankey, use_container_width=True)
             
+            # --- FEATURE 1: Waterfall Breakdown of Individual Sub-Categories ---
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
