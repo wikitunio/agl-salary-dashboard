@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 from groq import Groq
 import datetime
 import streamlit.components.v1 as components
+import json
+import os
 
 # Attempt to import PDF generator
 try:
@@ -13,12 +15,39 @@ try:
 except ImportError:
     FPDF_AVAILABLE = False
 
+try:
+    import PyPDF2
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+
 # --- Import our background functions ---
 from data_loader import fetch_salary_data, fetch_expense_data
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AGL Salary Portal", page_icon="🏭", layout="wide")
 
+# --- PERMANENT LOCAL PAYSLIP STORAGE ---
+LOCAL_PAYSLIPS_FILE = "saved_payslips.csv"
+
+def load_local_payslips():
+    if os.path.exists(LOCAL_PAYSLIPS_FILE):
+        return pd.read_csv(LOCAL_PAYSLIPS_FILE)
+    return pd.DataFrame()
+
+def save_local_payslip(new_row_dict):
+    df = load_local_payslips()
+    new_df = pd.DataFrame([new_row_dict])
+    combined = pd.concat([df, new_df], ignore_index=True)
+    combined.to_csv(LOCAL_PAYSLIPS_FILE, index=False)
+
+def delete_local_payslip(index):
+    df = load_local_payslips()
+    if index in df.index:
+        df = df.drop(index)
+        df.to_csv(LOCAL_PAYSLIPS_FILE, index=False)
+
+# --- AUTHENTICATION ---
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
@@ -221,11 +250,27 @@ def main():
     if check_password():
         st.markdown("<h1>🏭 AgriTech Ltd <span style='font-size:24px; color:gray;'>| Executive Compensation Portal</span></h1>", unsafe_allow_html=True)
         
-        with st.spinner("Synchronizing securely with Gmail..."):
+        with st.spinner("Synchronizing securely with Gmail & Local Database..."):
             df = fetch_salary_data()
+            
+            # --- INTEGRATE PERMANENT UPLOADED PAYSLIPS ---
+            local_df = load_local_payslips()
+            if not local_df.empty:
+                local_df['Date'] = pd.to_datetime(local_df['Date'], errors='coerce')
+                local_df['Year'] = local_df['Date'].dt.year
+                local_df['Month_Name'] = local_df['Date'].dt.strftime('%b').str.upper()
+                local_df['FY'] = local_df['Date'].apply(lambda x: f"FY{x.year}-{str(x.year+1)[-2:]}" if x.month >= 7 else f"FY{x.year-1}-{str(x.year)[-2:]}")
+                
+                if not df.empty:
+                    # Merge and let local manual uploads overwrite email fetched data if months clash
+                    df = pd.concat([df, local_df], ignore_index=True)
+                    df = df.drop_duplicates(subset=['Month'], keep='last')
+                    df = df.sort_values('Date', ascending=False).reset_index(drop=True)
+                else:
+                    df = local_df.sort_values('Date', ascending=False).reset_index(drop=True)
 
         if df.empty:
-            st.warning("No valid pay slip data could be parsed. Check email formatting.")
+            st.warning("No valid pay slip data could be parsed. Upload a manual payslip or check email formatting.")
             return
 
         render_executive_kpi(df)
@@ -258,7 +303,7 @@ def main():
             st.caption("Filters apply to raw data export and aggregated timeline views.")
 
         st.sidebar.markdown("---")
-        st.sidebar.caption("✅ Version 4.0: Live Sync & AI Chat")
+        st.sidebar.caption("✅ Version 5.0: AI Upload & Chat")
 
         prev_year_month = df[(df['Month'] == selected_month) & (df['Year'] == month_data['Year'] - 1)]
         current_index = df[df['Date'] == month_data['Date']].index[0]
@@ -319,8 +364,7 @@ def main():
         # --- CASH FLOW & FINANCIAL HEALTH ---
         df_exp, exp_error = fetch_expense_data()
         
-        # --- FEATURE: ROBUST MONTH NORMALIZER ---
-        # Forces any input ("Jul-26", "July 2026", "07/26") into clean "JUL-2026"
+        # Robust Month Normalizer
         if not df_exp.empty and 'Salary Month' in df_exp.columns:
             def clean_month_string(val):
                 if pd.isna(val): return ""
@@ -433,7 +477,7 @@ def main():
         st.divider()
 
         # --- TABS ---
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Pay & Tax Trends", 
             "🏠 Site Housing & Living", 
             "🎓 Master's Fund Tracker",
@@ -441,16 +485,13 @@ def main():
             "🗄️ Raw Data Export",
             "💸 Pocket Expenses (Log)",
             "🏛️ Tax Analytics",
-            "🔮 Salary Simulator"
+            "🔮 Salary Simulator",
+            "📤 Upload Payslip"
         ])
         
         with tab1:
             st.subheader("💧 Salary & Expense Waterfall")
             
-            # --- FEATURE 10: High-Resolution Multi-Tier Sankey Diagram ---
-            
-            # CRITICAL CSS INJECTION: 
-            # Removes Plotly's ugly text-shadow for crisp, standard fonts (HTML Style)
             st.markdown("""
             <style>
             .sankey-node text {
@@ -469,26 +510,21 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
-            # Labels have INLINE NUMBERS to prevent HTML stacking / overlap issues
+            # Inline Numbers
             sankey_labels = [
                 f"Gross Pay (Rs. {sankey_gross:,.0f})", 
                 f"Net Pay (Rs. {sankey_net:,.0f})"
             ]
             
-            # Pastel color palette matching HTML output
             pastel_colors = ['#8c9eff', '#ff9f9b', '#99e2a2', '#ffc07a', '#ccb0db', '#e2a79d', '#f9c5da', '#d1d1bd', '#e5e59b', '#aee5ef']
-            
             node_colors = [pastel_colors[0], pastel_colors[2]]
             source = []
             target = []
             value = []
             link_colors = []
-            
-            # Uniform, clean gray links
             gray_link = "rgba(200, 200, 200, 0.5)"
             current_idx = 2
             
-            # 1. Deductions explicitly separated
             deductions = {
                 "Income Tax": sankey_tax,
                 "PF Deduction": sankey_pf,
@@ -502,31 +538,27 @@ def main():
             for i, (name, val) in enumerate(deductions.items()):
                 if val > 0:
                     sankey_labels.append(f"{name} (Rs. {val:,.0f})")
-                    source.append(0) # From Gross Pay
+                    source.append(0) 
                     target.append(current_idx)
                     value.append(val)
                     node_colors.append(pastel_colors[(i + 3) % len(pastel_colors)])
                     link_colors.append(gray_link)
                     current_idx += 1
             
-            # 2. Link Gross Pay to Net Pay
             source.append(0)
             target.append(1)
             value.append(sankey_net)
             link_colors.append(gray_link)
             
-            # 3. Pocket Expenses from Net Pay (MULTI-TIER LOGIC)
             total_logged_exp = 0
             if not curr_exp.empty:
-                # Tier 1: Main Category
                 cat_sums = curr_exp.groupby('Category')['Amount (PKR)'].sum().sort_values(ascending=False)
                 cat_idx_map = {}
-                
                 color_offset = 0
                 for cat, val in cat_sums.items():
                     if val > 0:
                         sankey_labels.append(f"{cat} (Rs. {val:,.0f})")
-                        source.append(1) # From Net Pay
+                        source.append(1) 
                         target.append(current_idx)
                         value.append(val)
                         node_colors.append(pastel_colors[color_offset % len(pastel_colors)])
@@ -535,14 +567,11 @@ def main():
                         current_idx += 1
                         color_offset += 1
                         
-                # Tier 2: Sub-Category / Person
                 subcat_sums = curr_exp.groupby(['Category', 'Sub-Category / Person'])['Amount (PKR)'].sum().sort_values(ascending=False)
-                
                 for (cat, subcat), val in subcat_sums.items():
                     if val > 0:
-                        # Append the Sub-Category Node
                         sankey_labels.append(f"{subcat} (Rs. {val:,.0f})")
-                        source.append(cat_idx_map[cat]) # Link flows from the Parent Category
+                        source.append(cat_idx_map[cat]) 
                         target.append(current_idx)
                         value.append(val)
                         node_colors.append(pastel_colors[(color_offset + 1) % len(pastel_colors)])
@@ -551,7 +580,6 @@ def main():
                         current_idx += 1
                         color_offset += 1
                         
-            # 4. Savings from Net Pay
             sankey_sav = max(0, sankey_net - total_logged_exp)
             if sankey_sav > 0:
                 sankey_labels.append(f"Savings (Rs. {sankey_sav:,.0f})")
@@ -561,7 +589,6 @@ def main():
                 node_colors.append("#20B2AA")
                 link_colors.append(gray_link)
             
-            # Dynamic height ensures nodes never overlap vertically (spaced 35px per label)
             dynamic_height = max(550, 150 + len(sankey_labels) * 35)
 
             fig_sankey = go.Figure(data=[go.Sankey(
@@ -583,7 +610,6 @@ def main():
                 )
             )])
             
-            # Clean layout matching HTML look with huge left/right margins to prevent cut-offs
             fig_sankey.update_layout(
                 title_text="<b>Cash Flow & Sub-Category Sankey Diagram</b>", 
                 font=dict(size=12, color="#2c3e50", family="Arial, sans-serif"),
@@ -594,7 +620,6 @@ def main():
             )
             st.plotly_chart(fig_sankey, use_container_width=True)
             
-            # --- FEATURE 1: Waterfall Breakdown of Individual Sub-Categories ---
             wf_gross = month_data['Gross Pay']
             wf_tax = month_data['Income Tax']
             wf_pf = month_data['PF Deduction']
@@ -824,6 +849,63 @@ def main():
                 st.metric("Projected Gross Pay", f"Rs. {sim_gross:,.0f}", f"{'+' if diff_gross >=0 else ''}{diff_gross:,.0f} from current")
                 st.metric("Projected Net Take-Home", f"Rs. {sim_net:,.0f}", f"{'+' if diff_net >=0 else ''}{diff_net:,.0f} from current")
                 st.metric("Projected Total Deductions", f"Rs. {sim_total_deductions:,.0f}", delta_color="inverse")
+
+        with tab9:
+            st.subheader("📤 AI Payslip Importer")
+            st.markdown("Upload a PDF payslip. Gemini will instantly read, extract, and permanently save the data to your dashboard.")
+            
+            uploaded_payslip = st.file_uploader("Upload Payslip (PDF)", type=["pdf"])
+            if uploaded_payslip and st.button("🤖 Process & Save Payslip", use_container_width=True):
+                if not PYPDF_AVAILABLE:
+                    st.error("PyPDF2 is not installed. Please add it to requirements.txt.")
+                else:
+                    with st.spinner("Gemini is analyzing the document..."):
+                        try:
+                            reader = PyPDF2.PdfReader(uploaded_payslip)
+                            text = ""
+                            for page in reader.pages:
+                                text += page.extract_text() + "\n"
+                            
+                            system_prompt = """
+                            You are a financial data extraction AI. Extract the following salary components from the text. 
+                            Return ONLY a valid, raw JSON object. Do not include markdown formatting, backticks, or explanations.
+                            Required keys: "Month" (string, e.g. "AUG-2026"), "Date" (string, YYYY-MM-01 format, e.g., "2026-08-01"), "Basic Pay", "Hard Area", "House Rent Allowance", "Other Earnings", "Salary Arrears", "Other Allowances", "Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "House Rent Deduction", "EOBI", "Total Deductions", "Net Pay", "Leave Balance", "PF Employee Bal", "PF Company Bal".
+                            If a field is missing, use 0. All financial values must be numbers.
+                            """
+                            
+                            client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+                            completion = client.chat.completions.create(
+                                model="llama-3.3-70b-versatile",
+                                messages=[
+                                    {"role": "system", "content": system_prompt},
+                                    {"role": "user", "content": f"Extract from this payslip text:\n{text}"}
+                                ],
+                                temperature=0.1
+                            )
+                            
+                            response_text = completion.choices[0].message.content
+                            # Clean potential markdown wrapping
+                            clean_json = response_text.replace("```json", "").replace("```", "").strip()
+                            parsed_data = json.loads(clean_json)
+                            
+                            save_local_payslip(parsed_data)
+                            st.success(f"✅ Successfully imported and saved {parsed_data.get('Month', 'Payslip')}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error analyzing document: {str(e)}")
+            
+            st.divider()
+            st.markdown("#### 🗄️ Managed Uploaded Records")
+            local_payslips = load_local_payslips()
+            if local_payslips.empty:
+                st.info("No manual payslips have been uploaded yet.")
+            else:
+                for idx, row in local_payslips.iterrows():
+                    col1, col2 = st.columns([4, 1])
+                    col1.markdown(f"**{row.get('Month', 'Unknown')}** — Net Pay: Rs. {row.get('Net Pay', 0):,.0f}")
+                    if col2.button("❌ Delete", key=f"del_ps_{idx}"):
+                        delete_local_payslip(idx)
+                        st.rerun()
 
 
         # --- FEATURE 6: FOOLPROOF JAVASCRIPT FLOATING AI WIDGET ---
