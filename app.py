@@ -7,6 +7,7 @@ import datetime
 import streamlit.components.v1 as components
 import json
 import os
+import base64
 
 # Attempt to import PDF generator
 try:
@@ -60,11 +61,11 @@ def check_password():
     # --- FEATURE 5: iPhone Style On-Screen Keyboard ---
     st.markdown("<h2 style='text-align: center; font-family: sans-serif; margin-bottom: -10px;'>🔒 Enter Passcode</h2>", unsafe_allow_html=True)
     
-    # Display hidden PIN dots
+    # Display hidden PIN dots (white-space: nowrap prevents wrapping on mobile)
     pin_len = len(st.session_state["pin_input"])
     target_len = len(str(st.secrets["DASHBOARD_PASSWORD"]))
     pin_display = "● " * pin_len + "○ " * max(0, (target_len - pin_len))
-    st.markdown(f"<h1 style='text-align: center; letter-spacing: 20px; color: #1f77b4; margin-bottom: 20px;'>{pin_display}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: center; letter-spacing: 10px; white-space: nowrap; color: #1f77b4; margin-bottom: 20px;'>{pin_display}</h1>", unsafe_allow_html=True)
 
     def pin_press(digit):
         st.session_state["pin_input"] += str(digit)
@@ -78,29 +79,26 @@ def check_password():
     def pin_backspace():
         st.session_state["pin_input"] = st.session_state["pin_input"][:-1]
 
-    # TRUE iPHONE LAYOUT KEYPAD (4 Rows x 3 Columns + Mobile CSS Overrides)
+    # TRUE iPHONE LAYOUT KEYPAD (Bulletproof Mobile CSS Overrides)
     st.markdown("""
         <style>
-        /* iPhone Lockscreen Keypad Container constraints */
+        /* Force side-by-side on mobile, entirely preventing stacking */
         div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            justify-content: center !important;
+            width: 100% !important;
             max-width: 320px !important;
             margin: 0 auto !important;
             gap: 15px !important;
-            justify-content: center !important;
         }
         
-        /* Force side-by-side on mobile, entirely preventing stacking */
-        @media (max-width: 640px) {
-            div[data-testid="stHorizontalBlock"] {
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-            }
-            div[data-testid="column"] {
-                width: auto !important;
-                flex: 1 1 0% !important;
-                min-width: 0 !important;
-                padding: 0 5px !important;
-            }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: 33.33% !important;
+            flex: 1 1 0% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
         }
 
         /* Circular iPhone Buttons */
@@ -852,47 +850,75 @@ def main():
 
         with tab9:
             st.subheader("📤 AI Payslip Importer")
-            st.markdown("Upload a PDF payslip. Gemini will instantly read, extract, and permanently save the data to your dashboard.")
+            st.markdown("Upload a payslip document. Gemini will instantly read, extract, and permanently save the data to your dashboard.")
             
-            uploaded_payslip = st.file_uploader("Upload Payslip (PDF)", type=["pdf"])
+            # --- SUPPORT FOR ALL REQUESTED FILE TYPES ---
+            uploaded_payslip = st.file_uploader("Upload Payslip", type=["pdf", "png", "jpg", "jpeg", "csv", "xlsx", "txt"])
+            
             if uploaded_payslip and st.button("🤖 Process & Save Payslip", use_container_width=True):
-                if not PYPDF_AVAILABLE:
-                    st.error("PyPDF2 is not installed. Please add it to requirements.txt.")
-                else:
-                    with st.spinner("Gemini is analyzing the document..."):
-                        try:
+                ext = uploaded_payslip.name.split('.')[-1].lower()
+                
+                with st.spinner(f"Gemini is analyzing the {ext.upper()} file..."):
+                    try:
+                        system_prompt = """
+                        You are a financial data extraction AI. Extract the following salary components from the text or image. 
+                        Return ONLY a valid, raw JSON object. Do not include markdown formatting, backticks, or explanations.
+                        Required keys: "Month" (string, e.g. "AUG-2026"), "Date" (string, YYYY-MM-01 format, e.g., "2026-08-01"), "Basic Pay", "Hard Area", "House Rent Allowance", "Other Earnings", "Salary Arrears", "Other Allowances", "Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "House Rent Deduction", "EOBI", "Total Deductions", "Net Pay", "Leave Balance", "PF Employee Bal", "PF Company Bal".
+                        If a field is missing, use 0. All financial values must be numbers.
+                        """
+                        
+                        messages = []
+                        # Default to the ultra-fast language model for text files
+                        model = "llama-3.3-70b-versatile"
+                        
+                        if ext == 'pdf':
+                            if not PYPDF_AVAILABLE:
+                                st.error("PyPDF2 is not installed. Add it to requirements.txt.")
+                                st.stop()
                             reader = PyPDF2.PdfReader(uploaded_payslip)
-                            text = ""
-                            for page in reader.pages:
-                                text += page.extract_text() + "\n"
+                            text = "".join([page.extract_text() + "\n" for page in reader.pages])
+                            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Extract from this payslip text:\n{text}"}]
                             
-                            system_prompt = """
-                            You are a financial data extraction AI. Extract the following salary components from the text. 
-                            Return ONLY a valid, raw JSON object. Do not include markdown formatting, backticks, or explanations.
-                            Required keys: "Month" (string, e.g. "AUG-2026"), "Date" (string, YYYY-MM-01 format, e.g., "2026-08-01"), "Basic Pay", "Hard Area", "House Rent Allowance", "Other Earnings", "Salary Arrears", "Other Allowances", "Gross Pay", "Income Tax", "PF Deduction", "Mess Bill", "Club Bill", "House Rent Deduction", "EOBI", "Total Deductions", "Net Pay", "Leave Balance", "PF Employee Bal", "PF Company Bal".
-                            If a field is missing, use 0. All financial values must be numbers.
-                            """
+                        elif ext in ['csv']:
+                            text = pd.read_csv(uploaded_payslip).to_string()
+                            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Extract from this payslip text:\n{text}"}]
                             
-                            client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-                            completion = client.chat.completions.create(
-                                model="llama-3.3-70b-versatile",
-                                messages=[
-                                    {"role": "system", "content": system_prompt},
-                                    {"role": "user", "content": f"Extract from this payslip text:\n{text}"}
-                                ],
-                                temperature=0.1
-                            )
+                        elif ext in ['xlsx']:
+                            text = pd.read_excel(uploaded_payslip).to_string()
+                            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Extract from this payslip text:\n{text}"}]
                             
-                            response_text = completion.choices[0].message.content
-                            # Clean potential markdown wrapping
-                            clean_json = response_text.replace("```json", "").replace("```", "").strip()
-                            parsed_data = json.loads(clean_json)
+                        elif ext in ['txt']:
+                            text = uploaded_payslip.getvalue().decode('utf-8')
+                            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Extract from this payslip text:\n{text}"}]
                             
-                            save_local_payslip(parsed_data)
-                            st.success(f"✅ Successfully imported and saved {parsed_data.get('Month', 'Payslip')}!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error analyzing document: {str(e)}")
+                        elif ext in ['jpg', 'jpeg', 'png']:
+                            # Handle Image Uploads via Base64 and Vision Model
+                            base64_image = base64.b64encode(uploaded_payslip.getvalue()).decode('utf-8')
+                            messages = [
+                                {"role": "user", "content": [
+                                    {"type": "text", "text": system_prompt + "\nExtract data from this payslip image."},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/{ext};base64,{base64_image}"}}
+                                ]}
+                            ]
+                            # Switch to Groq's multimodal Vision AI for images
+                            model = "llama-3.2-11b-vision-preview"
+
+                        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+                        completion = client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            temperature=0.1
+                        )
+                        
+                        response_text = completion.choices[0].message.content
+                        clean_json = response_text.replace("```json", "").replace("```", "").strip()
+                        parsed_data = json.loads(clean_json)
+                        
+                        save_local_payslip(parsed_data)
+                        st.success(f"✅ Successfully imported and saved {parsed_data.get('Month', 'Payslip')}!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error analyzing document: {str(e)}")
             
             st.divider()
             st.markdown("#### 🗄️ Managed Uploaded Records")
