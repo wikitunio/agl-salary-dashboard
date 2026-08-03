@@ -29,13 +29,13 @@ def check_password():
         return True
 
     # --- FEATURE 5: iPhone Style On-Screen Keyboard ---
-    st.markdown("<h2 style='text-align: center; font-family: sans-serif;'>🔒 Enter Passcode</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; font-family: sans-serif; margin-bottom: -10px;'>🔒 Enter Passcode</h2>", unsafe_allow_html=True)
     
     # Display hidden PIN dots
     pin_len = len(st.session_state["pin_input"])
     target_len = len(str(st.secrets["DASHBOARD_PASSWORD"]))
     pin_display = "● " * pin_len + "○ " * max(0, (target_len - pin_len))
-    st.markdown(f"<h1 style='text-align: center; letter-spacing: 15px; color: #1f77b4;'>{pin_display}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: center; letter-spacing: 20px; color: #1f77b4; margin-bottom: 20px;'>{pin_display}</h1>", unsafe_allow_html=True)
 
     def pin_press(digit):
         st.session_state["pin_input"] += str(digit)
@@ -49,29 +49,87 @@ def check_password():
     def pin_backspace():
         st.session_state["pin_input"] = st.session_state["pin_input"][:-1]
 
-    # Keypad Grid
+    # TRUE iPHONE LAYOUT KEYPAD (4 Rows x 3 Columns + Mobile CSS Overrides)
     st.markdown("""
         <style>
-        div[data-testid="stButton"] button { height: 60px; font-size: 24px; border-radius: 30px; }
+        /* iPhone Lockscreen Keypad Container constraints */
+        div[data-testid="stHorizontalBlock"] {
+            max-width: 320px !important;
+            margin: 0 auto !important;
+            gap: 15px !important;
+            justify-content: center !important;
+        }
+        
+        /* Force side-by-side on mobile, entirely preventing stacking */
+        @media (max-width: 640px) {
+            div[data-testid="stHorizontalBlock"] {
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+            }
+            div[data-testid="column"] {
+                width: auto !important;
+                flex: 1 1 0% !important;
+                min-width: 0 !important;
+                padding: 0 5px !important;
+            }
+        }
+
+        /* Circular iPhone Buttons */
+        div[data-testid="stButton"] button {
+            height: 80px !important;
+            width: 80px !important;
+            font-size: 32px !important;
+            border-radius: 50% !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: transparent !important;
+            border: 1.5px solid rgba(128, 128, 128, 0.4) !important;
+            color: #333 !important;
+            font-weight: 300 !important;
+            transition: background-color 0.1s !important;
+        }
+        div[data-testid="stButton"] button:active {
+            background-color: rgba(128, 128, 128, 0.3) !important;
+        }
+
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            div[data-testid="stButton"] button {
+                color: #fff !important;
+                border-color: rgba(255, 255, 255, 0.4) !important;
+            }
+            div[data-testid="stButton"] button:active {
+                background-color: rgba(255, 255, 255, 0.3) !important;
+            }
+        }
         </style>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
-    with col2:
-        st.button("1", on_click=pin_press, args=("1",), use_container_width=True)
-        st.button("4", on_click=pin_press, args=("4",), use_container_width=True)
-        st.button("7", on_click=pin_press, args=("7",), use_container_width=True)
-        st.button("C", on_click=pin_clear, use_container_width=True)
-    with col3:
-        st.button("2", on_click=pin_press, args=("2",), use_container_width=True)
-        st.button("5", on_click=pin_press, args=("5",), use_container_width=True)
-        st.button("8", on_click=pin_press, args=("8",), use_container_width=True)
-        st.button("0", on_click=pin_press, args=("0",), use_container_width=True)
-    with col4:
-        st.button("3", on_click=pin_press, args=("3",), use_container_width=True)
-        st.button("6", on_click=pin_press, args=("6",), use_container_width=True)
-        st.button("9", on_click=pin_press, args=("9",), use_container_width=True)
-        st.button("⌫", on_click=pin_backspace, use_container_width=True)
+    # ROW 1
+    c1, c2, c3 = st.columns(3)
+    c1.button("1", on_click=pin_press, args=("1",), use_container_width=True)
+    c2.button("2", on_click=pin_press, args=("2",), use_container_width=True)
+    c3.button("3", on_click=pin_press, args=("3",), use_container_width=True)
+    
+    # ROW 2
+    c4, c5, c6 = st.columns(3)
+    c4.button("4", on_click=pin_press, args=("4",), use_container_width=True)
+    c5.button("5", on_click=pin_press, args=("5",), use_container_width=True)
+    c6.button("6", on_click=pin_press, args=("6",), use_container_width=True)
+
+    # ROW 3
+    c7, c8, c9 = st.columns(3)
+    c7.button("7", on_click=pin_press, args=("7",), use_container_width=True)
+    c8.button("8", on_click=pin_press, args=("8",), use_container_width=True)
+    c9.button("9", on_click=pin_press, args=("9",), use_container_width=True)
+
+    # ROW 4
+    c10, c11, c12 = st.columns(3)
+    c10.button("C", on_click=pin_clear, use_container_width=True)
+    c11.button("0", on_click=pin_press, args=("0",), use_container_width=True)
+    c12.button("⌫", on_click=pin_backspace, use_container_width=True)
 
     st.markdown("<br><hr>", unsafe_allow_html=True)
     
@@ -261,6 +319,22 @@ def main():
         # --- CASH FLOW & FINANCIAL HEALTH ---
         df_exp, exp_error = fetch_expense_data()
         
+        # --- FEATURE: ROBUST MONTH NORMALIZER ---
+        # Forces any input ("Jul-26", "July 2026", "07/26") into clean "JUL-2026"
+        if not df_exp.empty and 'Salary Month' in df_exp.columns:
+            def clean_month_string(val):
+                if pd.isna(val): return ""
+                val_str = str(val).strip()
+                try:
+                    dt = pd.to_datetime(val_str, errors='coerce')
+                    if not pd.isna(dt):
+                        return dt.strftime('%b-%Y').upper()
+                except Exception:
+                    pass
+                return val_str.upper()
+                
+            df_exp['Salary Month'] = df_exp['Salary Month'].apply(clean_month_string)
+
         # Clean and Combine Sub-Categories
         if not df_exp.empty:
             if 'Sub-Category / Person' not in df_exp.columns:
@@ -395,8 +469,11 @@ def main():
             sankey_net = month_data['Net Pay']
             sankey_gross = month_data['Gross Pay']
             
-            # Labels have NO NUMBERS in the text string (prevents overlap/stacking)
-            sankey_labels = ["Gross Pay", "Net Pay"]
+            # Labels have INLINE NUMBERS to prevent HTML stacking / overlap issues
+            sankey_labels = [
+                f"Gross Pay (Rs. {sankey_gross:,.0f})", 
+                f"Net Pay (Rs. {sankey_net:,.0f})"
+            ]
             
             # Pastel color palette matching HTML output
             pastel_colors = ['#8c9eff', '#ff9f9b', '#99e2a2', '#ffc07a', '#ccb0db', '#e2a79d', '#f9c5da', '#d1d1bd', '#e5e59b', '#aee5ef']
@@ -424,7 +501,7 @@ def main():
             
             for i, (name, val) in enumerate(deductions.items()):
                 if val > 0:
-                    sankey_labels.append(name)
+                    sankey_labels.append(f"{name} (Rs. {val:,.0f})")
                     source.append(0) # From Gross Pay
                     target.append(current_idx)
                     value.append(val)
@@ -448,7 +525,7 @@ def main():
                 color_offset = 0
                 for cat, val in cat_sums.items():
                     if val > 0:
-                        sankey_labels.append(cat)
+                        sankey_labels.append(f"{cat} (Rs. {val:,.0f})")
                         source.append(1) # From Net Pay
                         target.append(current_idx)
                         value.append(val)
@@ -464,7 +541,7 @@ def main():
                 for (cat, subcat), val in subcat_sums.items():
                     if val > 0:
                         # Append the Sub-Category Node
-                        sankey_labels.append(subcat)
+                        sankey_labels.append(f"{subcat} (Rs. {val:,.0f})")
                         source.append(cat_idx_map[cat]) # Link flows from the Parent Category
                         target.append(current_idx)
                         value.append(val)
@@ -477,22 +554,22 @@ def main():
             # 4. Savings from Net Pay
             sankey_sav = max(0, sankey_net - total_logged_exp)
             if sankey_sav > 0:
-                sankey_labels.append("Savings")
+                sankey_labels.append(f"Savings (Rs. {sankey_sav:,.0f})")
                 source.append(1)
                 target.append(current_idx)
                 value.append(sankey_sav)
                 node_colors.append("#20B2AA")
                 link_colors.append(gray_link)
             
-            # Dynamic height ensures nodes never overlap vertically
-            dynamic_height = max(550, 100 + len(sankey_labels) * 20)
+            # Dynamic height ensures nodes never overlap vertically (spaced 35px per label)
+            dynamic_height = max(550, 150 + len(sankey_labels) * 35)
 
             fig_sankey = go.Figure(data=[go.Sankey(
                 valueformat = ",.0f",
                 valuesuffix = " PKR",
                 arrangement = "snap",
                 node = dict(
-                    pad = 15, 
+                    pad = 20, 
                     thickness = 15, 
                     line = dict(color = "rgba(0,0,0,0.3)", width = 0.5), 
                     label = sankey_labels,
@@ -506,12 +583,12 @@ def main():
                 )
             )])
             
-            # Clean layout matching HTML look
+            # Clean layout matching HTML look with huge left/right margins to prevent cut-offs
             fig_sankey.update_layout(
                 title_text="<b>Cash Flow & Sub-Category Sankey Diagram</b>", 
                 font=dict(size=12, color="#2c3e50", family="Arial, sans-serif"),
                 height=dynamic_height, 
-                margin=dict(l=20, r=150, t=40, b=40),
+                margin=dict(l=200, r=200, t=40, b=40),
                 plot_bgcolor='white',
                 paper_bgcolor='white'
             )
